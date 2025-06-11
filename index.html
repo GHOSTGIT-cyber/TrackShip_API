@@ -130,18 +130,18 @@
       justify-content: space-between; 
       align-items: center; 
       gap: 12px;}
-    .perimeter-map {
-      width: 420px; 
-      max-width: 100vw; 
-      height: 510px; 
+      .perimeter-map {
+      position: fixed;
+      top: 100px;
+      right: 20px;       /* place la carte à 20px du bord droit */
+      width: 420px;
+      height: 510px;
       border-radius: 22px; 
       box-shadow: 0 10px 32px #475ca640;
       border: 4px solid #f6f7fa; 
       overflow: hidden; 
-      position: sticky; 
-      top: 45px; 
       background: #fff; 
-      z-index: 8;
+      z-index: 9999;      /* bien au-dessus pour rester visible */
     }
     .leaflet-popup-content-wrapper, .leaflet-popup-tip {
       border-radius: 15px !important; 
