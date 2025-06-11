@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Euris Boats Manager</title>
+    <style>
+        .container {
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 20px;
+        }
+        .token-section {
+            margin-bottom: 15px;
+        }
+        #apiToken {
+            width: 300px;
+            padding: 5px;
+        }
+        button {
+            padding: 8px 15px;
+            margin-right: 10px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="token-section">
+            <label for="apiToken">Token d'accès API :</label>
+            <input type="text" 
+                   id="apiToken" 
+                   name="apiToken" 
+                   placeholder="Collez votre token OAuth2 ici"
+                   required>
+        </div>
+
+        <button id="loadBoatsBtn">Charger les bateaux</button>
+        <button id="updateBboxBtn">Mettre à jour la carte</button>
+
+        <!-- Zone d'affichage des résultats -->
+        <div id="results"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Récupération du token depuis l'input
+            function getAPIToken() {
+                return document.getElementById('apiToken').value.trim();
+            }
+
+            // Gestionnaire pour le chargement des bateaux
+            document.getElementById('loadBoatsBtn').addEventListener('click', function() {
+                const token = getAPIToken();
+                if (!token) {
+                    alert('Veuillez entrer un token valide');
+                    return;
+                }
+                console.log('Chargement des bateaux avec token:', token);
+                // Ajouter ici la logique de chargement
+            });
+
+            // Gestionnaire pour la mise à jour de la carte
+            document.getElementById('updateBboxBtn').addEventListener('click', function() {
+                const token = getAPIToken();
+                if (!token) {
+                    alert('Veuillez entrer un token valide');
+                    return;
+                }
+                console.log('Mise à jour de la carte avec token:', token);
+                // Ajouter ici la logique de mise à jour
+            });
+        });
+    </script>
+</body>
+</html>

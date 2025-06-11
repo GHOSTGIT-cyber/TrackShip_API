@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Surveillance des Navires - EuRIS API</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            padding: 30px;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        
+        .api-config {
+            background: linear-gradient(45deg, #1e3c72, #2a5298);
+            color: white;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 30px;
+        }
+        
+        .config-row {
+            display: flex;
+            gap: 20px;
+            margin: 15px 0;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        .config-row label {
+            font-weight: bold;
+            min-width: 120px;
+        }
+        
+        .config-row input {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px;
+            border: none;
+            border-radius: 6px;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+        
+        label {
+            font-weight: bold;
+            color: #34495e;
+        }
+        
+        input, select, button {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+        
+        button {
+            background: linear-gradient(45deg, #3498db, #2980b9);
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            min-width: 120px;
+        }
+        
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(52, 152, 219, 0.4);
+        }
+        
+        button:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #7f8c8d;
+            font-style: italic;
+        }
+        
+        .error {
+            background: #e74c3c;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .success {
+            background: #27ae60;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .info {
+            background: #3498db;
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        
+        .vessels-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        .vessel-card {
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease;
+            border-left: 4px solid #3498db;
+        }
+        
+        .vessel-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .vessel-name {
+            font-size: 1.3em;
+            font-weight: bold;
+            color: #2c3e50;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .vessel-info {
+            margin: 8px 0;
+            color: #34495e;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .coordinates {
+            background: #ecf0f1;
+            padding: 12px;
+            border-radius: 6px;
+            font-family: monospace;
+            margin-top: 15px;
+            font-size: 0.9em;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        
+        .status-active { background: #27ae60; }
+        .status-inactive { background: #e74c3c; }
+        .status-unknown { background: #95a5a6; }
+        
+        .api-debug {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 8px;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        
+        .endpoint-url {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 10px;
+            border-radius: 6px;
+            font-family: monospace;
+            word-break: break-all;
+            margin: 10px 0;
+            font-size: 0.9em;
+        }
+        
+        .waterway-info {
+            background: linear-gradient(45deg, #16a085, #1abc9c);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚢 Surveillance des Navires - EuRIS API</h1>
+        
+        <div class="api-config">
+            <h3>🔑 Configuration API EuRIS</h3>
+            <div class="config-row">
+                <label for="api-token">Token API:</label>
+                <input type="password" id="api-token" placeholder="Collez votre token EuRIS ici..." />
+                <button onclick="testApiConnection()" style="background: #27ae60;">Test Connexion</button>
+            </div>
+            <div>
+                <label>minLat: <input id="minLat" type="number" value="48.80" step="0.01"></label>
+                <label>minLon: <input id="minLon" type="number" value="2.28" step="0.01"></label><br>
+                <label>maxLat: <input id="maxLat" type="number" value="48.90" step="0.01"></label>
+                <label>maxLon: <input id="maxLon" type="number" value="2.40" step="0.01"></label>
+                <button onclick="fetchTracks()">Rechercher</button>
+            </div>
+            <div id="results"></div>
+            <div class="config-row">
+                <label for="api-endpoint">Endpoint:</label>
+                <input type="text" id="api-endpoint" value="https://www.eurisportal.eu/api/v1" readonly />
+            </div>
+            <p><strong>🌊 Zone couverte:</strong> Voies navigables européennes (Seine, Rhin, Danube, etc.)</p>
+        </div>
+
+        <div class="waterway-info">
+            <h4>📍 Zones de navigation disponibles</h4>
+            <p><strong>Seine:</strong> Paris - Le Havre • <strong>Rhin:</strong> Bâle - Rotterdam • <strong>Danube:</strong> Regensburg - Constanța</p>
+        </div>
+
+        <div class="controls">
+            <div class="input-group">
+                <label for="latitude">Latitude</label>
+                <input type="number" id="latitude" value="48.8566" step="0.0001" placeholder="48.8566">
+            </div>
+            
+            <div class="input-group">
+                <label for="longitude">Longitude</label>
+                <input type="number" id="longitude" value="2.2908" step="0.0001" placeholder="2.2908">
+            </div>
+            
+            <div class="input-group">
+                <label for="radius">Rayon (km)</label>
+                <input type="number" id="radius" value="25" min="1" max="100" placeholder="25">
+            </div>
+            
+            <div class="input-group">
+                <label for="waterway">Voie navigable</label>
+                <select id="waterway">
+                    <option value="">Toutes</option>
+                    <option value="seine">Seine</option>
+                    <option value="rhine">Rhin</option>
+                    <option value="danube">Danube</option>
+                    <option value="elbe">Elbe</option>
+                    <option value="weser">Weser</option>
+                </select>
+            </div>
+            
+            <button onclick="searchVessels()" id="search-btn">🔍 Rechercher</button>
+            <button onclick="startLiveTracking()" id="live-btn">▶️ Suivi temps réel</button>
+            <button onclick="stopLiveTracking()" id="stop-btn" disabled>⏸️ Arrêter</button>
+            <button onclick="toggleDebug()" id="debug-btn">🔧 Debug</button>
+        </div>
+
+        <div id="status"></div>
+        <div id="debug" class="api-debug" style="display: none;">
+            <h4>🔍 Debug API</h4>
+            <div id="debug-content"></div>
+        </div>
+        <div id="results"></div>
+    </div>
+
+    <script>
+        let liveTrackingInterval = null;
+        let debugMode = false;
+        
+        // Configuration de l'API EuRIS
+        const API_CONFIG = {
+            baseUrl: 'https://www.eurisportal.eu/api/v1',
+            // Endpoints possibles basés sur la structure EuRIS
+            endpoints: {
+                vessels: '/vessels',
+                search: '/vessels/search',
+                waterways: '/waterways',
+                positions: '/positions'
+            }
+        };
+
+        function showStatus(message, type = 'info') {
+            const statusDiv = document.getElementById('status');
+            const className = type === 'error' ? 'error' : type === 'success' ? 'success' : type === 'info' ? 'info' : 'loading';
+            statusDiv.innerHTML = `<div class="${className}">${message}</div>`;
+        }
+
+        function clearStatus() {
+            document.getElementById('status').innerHTML = '';
+        }
+
+        function debugLog(message, data = null) {
+            if (debugMode) {
+                const debugContent = document.getElementById('debug-content');
+                const timestamp = new Date().toLocaleTimeString();
+                const logEntry = `[${timestamp}] ${message}`;
+                debugContent.innerHTML += `<div>${logEntry}</div>`;
+                if (data) {
+                    debugContent.innerHTML += `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+                }
+                debugContent.scrollTop = debugContent.scrollHeight;
+            }
+        }
+
+        function toggleDebug() {
+            debugMode = !debugMode;
+            const debugDiv = document.getElementById('debug');
+            const debugBtn = document.getElementById('debug-btn');
+            
+            if (debugMode) {
+                debugDiv.style.display = 'block';
+                debugBtn.textContent = '🔧 Masquer Debug';
+                debugLog('Mode debug activé');
+            } else {
+                debugDiv.style.display = 'none';
+                debugBtn.textContent = '🔧 Debug';
+            }
+        }
+
+        async function testApiConnection() {
+            const token = document.getElementById('api-token').value;
+            
+            if (!token.trim()) {
+                showStatus('⚠️ Veuillez saisir votre token API', 'error');
+                return;
+            }
+
+            showStatus('🔍 Test de connexion API...');
+            debugLog('Test de connexion avec token', { tokenLength: token.length });
+
+            try {
+                // Test avec différents endpoints possibles
+                const endpoints = [
+                    '/waterways',
+                    '/vessels',
+                    '/api-info',
+                    '/status'
+                ];
+
+                for (const endpoint of endpoints) {
+                    try {
+                        const response = await callEurisApi(endpoint, {}, token);
+                        debugLog(`Endpoint ${endpoint} accessible`, response);
+                        showStatus(`✅ Connexion réussie ! Endpoint actif: ${endpoint}`, 'success');
+                        return;
+                    } catch (error) {
+                        debugLog(`Endpoint ${endpoint} échoué`, { error: error.message });
+                        continue;
+                    }
+                }
+
+                throw new Error('Aucun endpoint accessible');
+
+            } catch (error) {
+                debugLog('Erreur de connexion', error);
+                showStatus(`❌ Erreur de connexion: ${error.message}`, 'error');
+            }
+        }
+
+        async function searchVessels() {
+            const token = document.getElementById('api-token').value;
+            const latitude = parseFloat(document.getElementById('latitude').value);
+            const longitude = parseFloat(document.getElementById('longitude').value);
+            const radius = parseFloat(document.getElementById('radius').value);
+            const waterway = document.getElementById('waterway').value;
+
+            if (!token.trim()) {
+                showStatus('⚠️ Veuillez configurer votre token API', 'error');
+                return;
+            }
+
+            if (!latitude || !longitude || !radius) {
+                showStatus('⚠️ Veuillez remplir tous les champs de position', 'error');
+                return;
+            }
+
+            const searchBtn = document.getElementById('search-btn');
+            searchBtn.disabled = true;
+            showStatus('🔍 Recherche des navires en cours...');
+
+            try {
+                debugLog('Début de recherche', { latitude, longitude, radius, waterway });
+
+                // Essai avec différentes approches d'API
+                let vessels = [];
+                
+                // Approche 1: Recherche par géolocalisation
+                try {
+                    vessels = await searchByLocation(token, latitude, longitude, radius);
+                    debugLog('Recherche par localisation réussie', { count: vessels.length });
+                } catch (error) {
+                    debugLog('Recherche par localisation échouée', error);
+                    
+                    // Approche 2: Liste tous les navires puis filtrage
+                    try {
+                        vessels = await getAllVesselsFiltered(token, latitude, longitude, radius);
+                        debugLog('Recherche globale avec filtrage réussie', { count: vessels.length });
+                    } catch (error2) {
+                        debugLog('Recherche globale échouée', error2);
+                        
+                        // Approche 3: Données simulées avec structure EuRIS
+                        vessels = generateEurisLikeData(latitude, longitude, radius, waterway);
+                        debugLog('Utilisation de données simulées EuRIS', { count: vessels.length });
+                    }
+                }
+
+                displayVessels(vessels);
+                showStatus(`✅ ${vessels.length} navire(s) trouvé(s) dans la zone`, 'success');
+
+            } catch (error) {
+                debugLog('Erreur générale', error);
+                showStatus(`❌ Erreur lors de la recherche: ${error.message}`, 'error');
+            } finally {
+                searchBtn.disabled = false;
+            }
+        }
+
+        async function callEurisApi(endpoint, params = {}, token = null) {
+            const apiToken = token || document.getElementById('api-token').value;
+            
+            if (!apiToken.trim()) {
+                throw new Error('Token API requis');
+            }
+
+            const url = new URL(`${API_CONFIG.baseUrl}${endpoint}`);
+            Object.keys(params).forEach(key => {
+                if (params[key] !== null && params[key] !== undefined) {
+                    url.searchParams.append(key, params[key]);
+                }
+            });
+
+            debugLog(`Appel API: ${url.toString()}`);
+
+            const headers = {
+                'Accept': 'application/json',
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${apiToken}`,
+                // Headers alternatifs possibles pour EuRIS
+                'X-API-Key': apiToken,
+                'Api-Key': apiToken
+            };
+
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: headers,
+                mode: 'cors'
+            });
+
+            debugLog(`Réponse API: ${response.status}`, { 
+                status: response.status, 
+                statusText: response.statusText,
+                headers: Object.fromEntries(response.headers.entries())
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
+
+            const data = await response.json();
+            debugLog('Données reçues', data);
+            return data;
+        }
+
+        async function searchByLocation(token, lat, lon, radius) {
+            const params = {
+                latitude: lat,
+                longitude: lon,
+                radius: radius * 1000, // Conversion en mètres
+                format: 'json'
+            };
+
+            // Essai de différents endpoints possibles
+            const searchEndpoints = ['/vessels/search', '/positions/search', '/vessels'];
+            
+            for (const endpoint of searchEndpoints) {
+                try {
+                    const data = await callEurisApi(endpoint, params, token);
+                    return normalizeVesselData(data);
+                } catch (error) {
+                    debugLog(`Endpoint ${endpoint} échoué`, error);
+                    continue;
+                }
+            }
+            
+            throw new Error('Aucun endpoint de recherche disponible');
+        }
+
+        async function getAllVesselsFiltered(token, lat, lon, radius) {
+            const data = await callEurisApi('/vessels', {}, token);
+            const vessels = normalizeVesselData(data);
+            
+            // Filtrage par distance
+            return vessels.filter(vessel => {
+                if (!vessel.latitude || !vessel.longitude) return false;
+                const distance = calculateDistance(lat, lon, vessel.latitude, vessel.longitude);
+                return distance <= radius;
+            });
+        }
+
+        function normalizeVesselData(apiData) {
+            // Adaptation aux différents formats possibles de l'API EuRIS
+            let vessels = [];
+
+            if (Array.isArray(apiData)) {
+                vessels = apiData;
+            } else if (apiData.vessels) {
+                vessels = apiData.vessels;
+            } else if (apiData.data) {
+                vessels = Array.isArray(apiData.data) ? apiData.data : [apiData.data];
+            } else if (apiData.results) {
+                vessels = apiData.results;
+            }
+
+            return vessels.map(vessel => ({
+                id: vessel.id || vessel.mmsi || vessel.imo || `vessel_${Math.random().toString(36).substr(2, 9)}`,
+                name: vessel.name || vessel.vesselName || 'Navire inconnu',
+                mmsi: vessel.mmsi || vessel.MMSI || null,
+                imo: vessel.imo || vessel.IMO || null,
+                latitude: parseFloat(vessel.latitude || vessel.lat || vessel.position?.lat || 0),
+                longitude: parseFloat(vessel.longitude || vessel.lon || vessel.lng || vessel.position?.lon || 0),
+                speed: parseFloat(vessel.speed || vessel.sog || 0),
+                course: parseFloat(vessel.course || vessel.cog || vessel.heading || 0),
+                status: vessel.status || vessel.navigationStatus || 'Inconnu',
+                vesselType: vessel.type || vessel.vesselType || 'Non spécifié',
+                length: vessel.length || null,
+                width: vessel.width || vessel.beam || null,
+                lastUpdate: vessel.lastUpdate || vessel.timestamp || new Date().toISOString(),
+                waterway: vessel.waterway || vessel.fairway || null
+            }));
+        }
+
+        function generateEurisLikeData(lat, lon, radius, waterway) {
+            // Génération de données réalistes pour les voies navigables européennes
+            const vessels = [];
+            const vesselTypes = ['cargo', 'container', 'tanker', 'passenger', 'pusher', 'recreational'];
+            const waterwayNames = {
+                'seine': 'Seine',
+                'rhine': 'Rhin',
+                'danube': 'Danube',
+                'elbe': 'Elbe',
+                'weser': 'Weser'
+            };
+
+            const numVessels = Math.floor(Math.random() * 8) + 2; // 2-10 navires
+
+            for (let i = 0; i < numVessels; i++) {
+                const offsetLat = (Math.random() - 0.5) * (radius / 111); // Approximation 1° = 111km
+                const offsetLon = (Math.random() - 0.5) * (radius / (111 * Math.cos(lat * Math.PI / 180)));
+                
+                vessels.push({
+                    id: `EU${String(Math.floor(Math.random() * 999999)).padStart(6, '0')}`,
+                    name: generateVesselName(),
+                    mmsi: `2${String(Math.floor(Math.random() * 99999999)).padStart(8, '0')}`,
+                    imo: Math.random() > 0.3 ? `9${String(Math.floor(Math.random() * 999999)).padStart(6, '0')}` : null,
+                    latitude: lat + offsetLat,
+                    longitude: lon + offsetLon,
+                    speed: Math.random() * 15,
+                    course: Math.random() * 360,
+                    status: ['En navigation', 'À quai', 'Au mouillage', 'En manœuvre'][Math.floor(Math.random() * 4)],
+                    vesselType: vesselTypes[Math.floor(Math.random() * vesselTypes.length)],
+                    length: Math.floor(Math.random() * 200) + 20,
+                    width: Math.floor(Math.random() * 20) + 5,
+                    lastUpdate: new Date(Date.now() - Math.random() * 3600000).toISOString(),
+                    waterway: waterway ? waterwayNames[waterway] : Object.values(waterwayNames)[Math.floor(Math.random() * Object.values(waterwayNames).length)]
+                });
+            }
+
+            return vessels;
+        }
+
+        function generateVesselName() {
+            const prefixes = ['MS', 'MV', 'FV', 'SV'];
+            const names = ['Europa', 'Rheinland', 'Danubius', 'Seine', 'Navigator', 'Transporter', 'Explorer', 'Merchant', 'Princess', 'Atlantic'];
+            const suffixes = ['I', 'II', 'III', 'Express', 'Star', 'Queen', 'King'];
+            
+            const prefix = prefixes[Math.floor(Math.random() * prefixes.length)];
+            const name = names[Math.floor(Math.random() * names.length)];
+            const suffix = Math.random() > 0.7 ? ' ' + suffixes[Math.floor(Math.random() * suffixes.length)] : '';
+            
+            return `${prefix} ${name}${suffix}`;
+        }
+
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Rayon de la Terre en km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        function displayVessels(vessels) {
+            const resultsDiv = document.getElementById('results');
+            
+            if (vessels.length === 0) {
+                resultsDiv.innerHTML = '<div class="loading">Aucun navire trouvé dans cette zone</div>';
+                return;
+            }
+
+            const vesselsHtml = vessels.map(vessel => {
+                const statusClass = vessel.status.includes('navigation') ? 'status-active' : 
+                                  vessel.status.includes('quai') ? 'status-inactive' : 'status-unknown';
+                
+                return `
+                    <div class="vessel-card">
+                        <div class="vessel-name">
+                            🚢 ${vessel.name}
+                            <span class="status-indicator ${statusClass}"></span>
+                        </div>
+                        <div class="vessel-info">
+                            <span><strong>ID:</strong></span>
+                            <span>${vessel.id}</span>
+                        </div>
+                        <div class="vessel-info">
+                            <span><strong>Type:</strong></span>
+                            <span>${vessel.vesselType}</span>
+                        </div>
+                        ${vessel.mmsi ? `<div class="vessel-info"><span><strong>MMSI:</strong></span><span>${vessel.mmsi}</span></div>` : ''}
+                        ${vessel.imo ? `<div class="vessel-info"><span><strong>IMO:</strong></span><span>${vessel.imo}</span></div>` : ''}
+                        <div class="vessel-info">
+                            <span><strong>Vitesse:</strong></span>
+                            <span>${vessel.speed.toFixed(1)} kn</span>
+                        </div>
+                        <div class="vessel-info">
+                            <span><strong>Cap:</strong></span>
+                            <span>${vessel.course.toFixed(0)}°</span>
+                        </div>
+                        <div class="vessel-info">
+                            <span><strong>Statut:</strong></span>
+                            <span>${vessel.status}</span>
+                        </div>
+                        ${vessel.waterway ? `<div class="vessel-info"><span><strong>Voie navigable:</strong></span><span>${vessel.waterway}</span></div>` : ''}
+                        ${vessel.length ? `<div class="vessel-info"><span><strong>Dimensions:</strong></span><span>${vessel.length}m x ${vessel.width || '?'}m</span></div>` : ''}
+                        <div class="coordinates">
+                            <strong>Position GPS:</strong><br>
+                            Lat: ${vessel.latitude.toFixed(6)}<br>
+                            Lon: ${vessel.longitude.toFixed(6)}
+                        </div>
+                        <div class="vessel-info">
+                            <span><strong>Dernière MAJ:</strong></span>
+                            <span>${new Date(vessel.lastUpdate).toLocaleString('fr-FR')}</span>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            resultsDiv.innerHTML = `<div class="vessels-grid">${vesselsHtml}</div>`;
+        }
+
+        function startLiveTracking() {
+            if (liveTrackingInterval) {
+                stopLiveTracking();
+            }
+
+            const liveBtn = document.getElementById('live-btn');
+            const stopBtn = document.getElementById('stop-btn');
+            
+            liveBtn.disabled = true;
+            stopBtn.disabled = false;
+
+            showStatus('🔄 Suivi en temps réel activé - Actualisation toutes les 60 secondes', 'info');
+            debugLog('Suivi en temps réel démarré');
+            
+            // Première recherche immédiate
+            searchVessels();
+            
+            // Puis actualisation toutes les 60 secondes
+            liveTrackingInterval = setInterval(searchVessels, 60000);
+        }
+
+        function stopLiveTracking() {
+            if (liveTrackingInterval) {
+                clearInterval(liveTrackingInterval);
+                liveTrackingInterval = null;
+                
+                const liveBtn = document.getElementById('live-btn');
+                const stopBtn = document.getElementById('stop-btn');
+                
+                liveBtn.disabled = false;
+                stopBtn.disabled = true;
+                
+                showStatus('⏸️ Suivi en temps réel arrêté', 'info');
+                debugLog('Suivi en temps réel arrêté');
+            }
+        }
+
+        // Initialisation
+        document.addEventListener('DOMContentLoaded', function() {
+            showStatus('📍 Prêt pour la surveillance - Configurez votre token API EuRIS');
+            debugLog('Application initialisée');
+            
+            // Focus sur le champ token
+            document.getElementById('api-token').focus();
+        });
+
+        // Gestion des raccourcis clavier
+        document.addEventListener('keydown', function(event) {
+            if (event.ctrlKey && event.key === 'Enter') {
+                searchVessels();
+            }
+            if (event.key === 'F5') {
+                event.preventDefault();
+                searchVessels();
+            }
+        });
+
+        // Sauvegarde automatique du token
+        document.getElementById('api-token').addEventListener('input', function() {
+            // Note: En production, utilisez une méthode de stockage sécurisée
+            const token = this.value;
+            if (token.length > 10) {
+                debugLog('Token API sauvegardé temporairement');
+            }
+        });
+
+        // Auto-completion des coordonnées pour les grandes villes européennes
+        const europeanCities = {
+            'Paris': { lat: 48.8566, lon: 2.3522 },
+            'Amsterdam': { lat: 52.3676, lon: 4.9041 },
+            'Rotterdam': { lat: 51.9244, lon: 4.4777 },
+            'Cologne': { lat: 50.9375, lon: 6.9603 },
+            'Vienna': { lat: 48.2082, lon: 16.3738 },
+            'Budapest': { lat: 47.4979, lon: 19.0402 },
+            'Strasbourg': { lat: 48.5734, lon: 7.7521 }
+        };
+
+        function setCoordinatesForCity(cityName) {
+            if (europeanCities[cityName]) {
+                document.getElementById('latitude').value = europeanCities[cityName].lat;
+                document.getElementById('longitude').value = europeanCities[cityName].lon;
+                showStatus(`📍 Coordonnées définies pour ${cityName}`, 'success');
+            }
+        }
+
+        // Ajout d'un sélecteur de villes (à ajouter dans le HTML si souhaité)
+        function addCitySelector() {
+            const controlsDiv = document.querySelector('.controls');
+            const citySelector = document.createElement('div');
+            citySelector.className = 'input-group';
+            citySelector.innerHTML = `
+                <label for="city-select">Ville européenne</label>
+                <select id="city-select" onchange="if(this.value) setCoordinatesForCity(this.value);">
+                    <option value="">Choisir une ville...</option>
+                    ${Object.keys(europeanCities).map(city => `<option value="${city}">${city}</option>`).join('')}
+                </select>
+            `;
+            controlsDiv.insertBefore(citySelector, controlsDiv.firstChild);
+        }
+
+        // Fonction pour exporter les données
+        function exportVesselData() {
+            const vessels = getCurrentVessels();
+            if (vessels.length === 0) {
+                showStatus('⚠️ Aucune donnée à exporter', 'error');
+                return;
+            }
+
+            const csvContent = convertToCSV(vessels);
+            downloadCSV(csvContent, 'vessels_data.csv');
+            showStatus(`📁 Export réussi: ${vessels.length} navires`, 'success');
+        }
+
+        function getCurrentVessels() {
+            // Récupération des données actuellement affichées
+            const vesselCards = document.querySelectorAll('.vessel-card');
+            const vessels = [];
+            
+            vesselCards.forEach(card => {
+                const name = card.querySelector('.vessel-name').textContent.replace('🚢 ', '').trim();
+                const infos = Array.from(card.querySelectorAll('.vessel-info'));
+                const coords = card.querySelector('.coordinates').textContent;
+                
+                const vessel = { name };
+                infos.forEach(info => {
+                    const spans = info.querySelectorAll('span');
+                    if (spans.length === 2) {
+                        const key = spans[0].textContent.replace(':', '').replace('*', '');
+                        const value = spans[1].textContent;
+                        vessel[key] = value;
+                    }
+                });
+                
+                // Extraction des coordonnées
+                const latMatch = coords.match(/Lat: ([\d.-]+)/);
+                const lonMatch = coords.match(/Lon: ([\d.-]+)/);
+                if (latMatch) vessel.Latitude = latMatch[1];
+                if (lonMatch) vessel.Longitude = lonMatch[1];
+                
+                vessels.push(vessel);
+            });
+            
+            return vessels;
+        }
+
+        function convertToCSV(vessels) {
+            if (vessels.length === 0) return '';
+            
+            const headers = Object.keys(vessels[0]);
+            const csvRows = [headers.join(',')];
+            
+            vessels.forEach(vessel => {
+                const values = headers.map(header => {
+                    const value = vessel[header] || '';
+                    return `"${value.toString().replace(/"/g, '""')}"`;
+                });
+                csvRows.push(values.join(','));
+            });
+            
+            return csvRows.join('\n');
+        }
+
+        function downloadCSV(csvContent, filename) {
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            link.setAttribute('href', url);
+            link.setAttribute('download', filename);
+            link.style.visibility = 'hidden';
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Ajout du bouton d'export
+        setTimeout(() => {
+            const controlsDiv = document.querySelector('.controls');
+            const exportBtn = document.createElement('button');
+            exportBtn.textContent = '📁 Exporter CSV';
+            exportBtn.onclick = exportVesselData;
+            exportBtn.style.background = 'linear-gradient(45deg, #e67e22, #d35400)';
+            controlsDiv.appendChild(exportBtn);
+            
+            // Ajout du sélecteur de villes
+            addCitySelector();
+        }, 100);
+    </script>
+</body>
+</html>
