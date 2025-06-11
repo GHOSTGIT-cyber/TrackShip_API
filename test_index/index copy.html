@@ -59,27 +59,21 @@
     }
     .leaflet-popup-content-wrapper, .leaflet-popup-tip { border-radius: 15px !important; }
     .leaflet-popup-content { font-size: 1.09em;}
-    .netlify-badge {
-      background: linear-gradient(90deg, #00ad9f, #00c7b7);
-      color: white; padding: 4px 12px; border-radius: 15px; font-size: 0.85em;
-      position: absolute; top: 20px; right: 20px; box-shadow: 0 2px 8px rgba(0,173,159,0.3);
-    }
     @media (max-width: 1100px) {
       .main-container { flex-direction: column;}
       .perimeter-map { position: static; margin-top:30px; max-width:100vw; width:96vw;}
-      .netlify-badge { position: static; margin-bottom: 10px; display: inline-block; }
     }
   </style>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Montserrat:700,400">
 </head>
 <body>
 <div class="main-container">
-  <div class="netlify-badge">🚀 Powered by Netlify</div>
   <div class="panel">
     <div class="title">🛰️ Surveillance des navires en mouvement (Seine)</div>
-    <div class="subtitle">API EuRIS : uniquement navires en mouvement sur 5 km autour d'un point</div>
+    <div class="subtitle">API EuRIS : uniquement navires en mouvement sur 5 km autour d’un point</div>
     <form id="configForm" class="config-section" onsubmit="event.preventDefault(); fetchVessels();">
       <div class="config-row">
-        <label>Token API EuRIS</label>
+        <label>Token API EuRIS</label>
         <input type="password" id="token" placeholder="Collez votre token EuRIS..." required>
       </div>
       <div class="config-row">
@@ -107,7 +101,6 @@
 <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
 <script>
   let map, bboxLayer, markers=[], lastCenter=[48.85301,2.22440,5], timer=null;
-  
   function createMap(lat, lon, radiusKm) {
     if (!map) {
       map = L.map('map', {zoomControl:false, attributionControl:false});
@@ -120,82 +113,66 @@
     bboxLayer = L.rectangle(bounds, { color: "#2b67d1", fillOpacity: 0.08, weight: 4, dashArray: "16 10" }).addTo(map);
     map.fitBounds(bounds, {padding:[18,18]});
     lastCenter = [lat, lon, radiusKm];
+    // Remove old markers
     markers.forEach(m=>map.removeLayer(m)); markers=[];
   }
-  
   function fetchVessels(auto=false) {
     clearTimeout(timer);
     document.getElementById('vesselStatus').innerHTML = "⏳ Chargement...";
     document.getElementById('vesselsList').innerHTML = '';
-    
     const token = document.getElementById('token').value.trim();
     const lat = parseFloat(document.getElementById('lat').value);
     const lon = parseFloat(document.getElementById('lon').value);
     const radius = parseFloat(document.getElementById('radius').value);
     const delta = radius / 111.32;
     const minLat = lat - delta, maxLat = lat + delta, minLon = lon - delta, maxLon = lon + delta;
-    
     createMap(lat, lon, radius);
-    
-    // URL de la fonction Netlify (sera automatiquement adaptée au domaine)
-    const functionUrl = `/.netlify/functions/euris-proxy?minLat=${minLat}&maxLat=${maxLat}&minLon=${minLon}&maxLon=${maxLon}&pageSize=100&token=${encodeURIComponent(token)}`;
-    
-    fetch(functionUrl)
-      .then(async r => { 
-        if (!r.ok) {
-          const errorText = await r.text();
-          throw new Error(`HTTP ${r.status}: ${errorText}`);
-        }
-        return r.json(); 
-      })
+    const proxy = `euris_proxy.php?minLat=${minLat}&maxLat=${maxLat}&minLon=${minLon}&maxLon=${maxLon}&pageSize=100&token=${encodeURIComponent(token)}`;
+    fetch(proxy)
+      .then(async r => { if (!r.ok) throw new Error(await r.text()); return r.json(); })
       .then(data => {
-        let vessels = (data.items || data || []).filter(v=>v.moving);
-        vessels.sort((a, b) => Number(b.sog||0) - Number(a.sog||0));
+        let vessels = (data.items || data || []).filter(v=>v.moving); // UNIQUEMENT EN MOUVEMENT
+        vessels.sort((a, b) => Number(b.sog||0) - Number(a.sog||0)); // Plus rapide d'abord
         document.getElementById('vesselStatus').innerHTML = `<b>${vessels.length} navires en mouvement dans le périmètre</b> ${auto ? '(MAJ auto)' : ''}`;
         showVessels(vessels, lat, lon);
         showMapVessels(vessels);
         timer = setTimeout(() => fetchVessels(true), 30000);
       })
       .catch(err => {
-        console.error('Fetch error:', err);
         document.getElementById('vesselStatus').innerHTML = `<span style="color:#b30a19;font-weight:bold;">Erreur : ${err.message || err}</span>`;
         timer = setTimeout(() => fetchVessels(true), 30000);
       });
   }
-  
   function showVessels(vessels, lat, lon) {
     if (!vessels.length) {
       document.getElementById('vesselsList').innerHTML = "<div>Aucun navire en mouvement actuellement dans la zone.</div>";
       return;
     }
-    
+    // SVG bateau vert
     const svgMoving = `<svg class="vessel-svg" width="30" height="30" viewBox="0 0 30 30"><g><ellipse cx="15" cy="22" rx="10" ry="4" fill="#b8f0c7" opacity=".4"/><path d="M15 5 l10 17 -10 3 -10 -3z" fill="#22bf5c" stroke="#149840" stroke-width="2"/></g></svg>`;
-    
+    // Distance calcul
     function haversine(lat1, lon1, lat2, lon2) {
       const toRad = d => d * Math.PI / 180, R = 6371000;
       const dLat = toRad(lat2-lat1), dLon = toRad(lon2-lon1);
       const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
       return Math.round(R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)));
     }
-    
+    // Traductions
     function navStatus(code) {
       const desc = {0:"En route moteur",1:"Au mouillage",2:"Non maîtrisé",3:"Manœuvre restreinte",4:"Limité tirant d'eau",5:"Amarré",6:"Échoué",7:"Pêche",8:"Route voile",15:"Indéfini"};
       return desc[code] ?? `Code ${code}`;
     }
-    
     function humanDate(ts) {
       if (!ts) return "—";
       const date = new Date(ts);
       const now = new Date();
       const diff = Math.round((now-date)/1000);
-      if (diff < 60) return `Il y a ${diff} s.`;
-      if (diff < 3600) return `Il y a ${Math.floor(diff/60)} min`;
-      if (diff < 86400) return `Il y a ${Math.floor(diff/3600)} h`;
+      if (diff < 60) return `Il y a ${diff} s.`;
+      if (diff < 3600) return `Il y a ${Math.floor(diff/60)} min`;
+      if (diff < 86400) return `Il y a ${Math.floor(diff/3600)} h`;
       return date.toLocaleString('fr-FR');
     }
-    
-    const label = (champ, value) => `<div class="vessel-info"><span>${champ} :</span> <span>${value ?? "—"}</span></div>`;
-    
+    const label = (champ, value) => `<div class="vessel-info"><span>${champ} :</span> <span>${value ?? "—"}</span></div>`;
     document.getElementById('vesselsList').innerHTML = vessels.map(v => {
       const dist = haversine(lat, lon, v.lat, v.lon);
       return `<div class="vessel-card">
@@ -203,7 +180,7 @@
           ${svgMoving} Navire en mouvement
           <span style="font-size:1em;color:#666;font-weight:normal;">${v.positionISRSName ? '• '+v.positionISRSName : ""}</span>
         </div>
-        <div class="vessel-distance">Distance au centre : <b>${dist} m</b></div>
+        <div class="vessel-distance">Distance au centre : <b>${dist} m</b></div>
         ${label("Identifiant du navire", v.trackID)}
         ${label("Nom interne (si dispo)", v.name)}
         ${label("Latitude", Number(v.lat).toFixed(6))}
@@ -226,8 +203,9 @@
   }
 
   function showMapVessels(vessels) {
+    // Remove old markers
     markers.forEach(m=>map.removeLayer(m)); markers=[];
-    
+    // SVG icône pour Leaflet
     const svgIcon = L.divIcon({
       className: '',
       html: `<svg width="36" height="36" viewBox="0 0 30 30"><g><ellipse cx="15" cy="22" rx="10" ry="4" fill="#b8f0c7" opacity=".4"/><path d="M15 5 l10 17 -10 3 -10 -3z" fill="#22bf5c" stroke="#149840" stroke-width="2"/></g></svg>`,
@@ -235,7 +213,6 @@
       iconAnchor: [18, 24],
       popupAnchor: [0, -18]
     });
-    
     vessels.forEach(v => {
       if(!v.lat || !v.lon) return;
       const m = L.marker([v.lat, v.lon], {icon: svgIcon});
@@ -254,6 +231,7 @@
     });
   }
 
+  // Carte sticky dès le chargement
   document.addEventListener('DOMContentLoaded', ()=>{
     createMap(48.85301,2.22440,5);
     fetchVessels();
