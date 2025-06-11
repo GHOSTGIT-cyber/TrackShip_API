@@ -7,55 +7,139 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
   <style>
     body {
-      margin: 0; background: linear-gradient(135deg, #46579d 0%, #764ba2 100%);
+      margin: 0; 
+      background: linear-gradient(135deg, #46579d 0%, #764ba2 100%);
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
       min-height: 100vh;
     }
     .main-container {
-      max-width: 1400px; margin: 38px auto; padding: 24px 12px; background: #fff;
-      border-radius: 30px; box-shadow: 0 16px 40px rgba(44,62,80,0.17), 0 2px 6px rgba(44,62,80,0.10);
-      display: flex; gap: 42px; align-items: flex-start; position: relative;
+      max-width: 1400px; 
+      margin: 38px auto; 
+      padding: 24px 12px; 
+      background: #fff;
+      border-radius: 30px; 
+      box-shadow: 0 16px 40px rgba(44,62,80,0.17), 0 2px 6px rgba(44,62,80,0.10);
+      display: flex; 
+      gap: 42px; 
+      align-items: flex-start; 
+      position: relative;
     }
-    .panel { flex: 2; min-width: 350px; }
-    .title { font-size: 2.1em; font-weight: bold; color: #253365; margin-bottom: 8px;}
-    .subtitle { font-size: 1.1em; color: #888; margin-bottom: 18px; }
+    .panel { 
+      flex: 2; 
+      min-width: 350px; 
+    }
+    .title { font-size: 2.1em; 
+      font-weight: bold; 
+      color: #253365; 
+      margin-bottom: 8px;
+  }
+    .subtitle { 
+    font-size: 1.1em; 
+    color: #888; 
+    margin-bottom: 18px;
+  }
     .config-section {
-      margin-bottom: 18px; padding: 16px 18px; background: linear-gradient(120deg, #5b8beb 40%, #a6a3e3 100%);
-      border-radius: 18px; box-shadow: 0 5px 19px #53639219; color: white;
+      margin-bottom: 18px; 
+      padding: 16px 18px; 
+      background: linear-gradient(120deg, #5b8beb 40%, #a6a3e3 100%);
+      border-radius: 18px; 
+      box-shadow: 0 5px 19px #53639219; 
+      color: white;
     }
-    .config-row { margin-bottom: 14px; display: flex; gap: 22px; flex-wrap: wrap; align-items: center; }
-    .config-row label { font-weight: bold; min-width: 136px; }
+    .config-row { 
+      margin-bottom: 14px;
+      display: flex; 
+      gap: 22px; 
+      flex-wrap: wrap; 
+      align-items: center; }
+    .config-row label { 
+      font-weight: bold; 
+      min-width: 136px; 
+    }
     .config-row input {
-      flex: 1; min-width: 110px; border-radius: 8px; border: none; padding: 8px 14px; font-size: 1em; box-shadow: 0 2px 6px #2d33551a;
+      flex: 1;
+      min-width: 110px; 
+      border-radius: 8px; 
+      border: none; 
+      padding: 8px 14px; 
+      font-size: 1em; 
+      box-shadow: 0 2px 6px #2d33551a;
     }
     button {
       background: linear-gradient(90deg, #2b67d1 60%, #7e45a5 100%);
-      color: white; font-weight: bold; border: none; border-radius: 8px; font-size: 1.1em;
-      padding: 10px 24px; box-shadow: 0 6px 16px #202b4c22; cursor: pointer; margin-top: 8px; margin-right: 10px; transition: all 0.15s;
+      color: white; 
+      font-weight: bold; 
+      border: none; 
+      border-radius: 8px; 
+      font-size: 1.1em;
+      padding: 10px 24px; 
+      box-shadow: 0 6px 16px #202b4c22; 
+      cursor: pointer; 
+      margin-top: 8px; 
+      margin-right: 10px; 
+      transition: all 0.15s;
     }
-    button:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 12px 30px #53639230; background: linear-gradient(90deg, #4059a9 40%, #b05fff 100%);}
+    button:hover { 
+      transform: translateY(-2px) scale(1.03); 
+      box-shadow: 0 12px 30px #53639230; 
+      background: linear-gradient(90deg, #4059a9 40%, #b05fff 100%);
+    }
     .vessels-list {
-      display: flex; flex-direction: column; gap: 28px; margin-top: 24px; min-width: 340px;
+      display: flex; 
+      flex-direction: column; 
+      gap: 28px; 
+      margin-top: 24px; 
+      min-width: 340px;
     }
     .vessel-card {
       background: linear-gradient(135deg, #f5f7fa 0%, #dbeafe 100%);
       border-radius: 20px;
       box-shadow: 0 9px 26px #2e365e19, 0 1.5px 7px #2e365e13;
       padding: 22px 18px;
-      display: flex; flex-direction: column; gap: 9px;
+      display: flex; 
+      flex-direction: column; 
+      gap: 9px;
       border-left: 7px solid #29ad65;
       position: relative; transition: box-shadow .13s;
     }
-    .vessel-card .highlight { font-size: 1.25em; color: #354b7c; font-weight: bold; letter-spacing: 1px; margin-bottom: 2px;}
-    .vessel-card .vessel-svg { vertical-align: middle; margin-right: 10px;}
-    .vessel-distance {
-      font-size:1.08em;color:#19744c;background:#e6f5ea;
-      padding:3px 11px;border-radius:9px;display:inline-block;box-shadow:0 1px 4px #b5d2ff29;margin: 4px 0;
+    .vessel-card .highlight { 
+      font-size: 1.25em; 
+      color: #354b7c; 
+      font-weight: bold; 
+      letter-spacing: 1px; 
+      margin-bottom: 2px;
     }
-    .vessel-info { margin: 0 0 2px 0; font-size: 1.04em; display: flex; justify-content: space-between; align-items: center; gap: 12px;}
+    .vessel-card .vessel-svg { 
+      vertical-align: middle; 
+      margin-right: 10px;
+    }
+    .vessel-distance {
+      font-size:1.08em;color:#19744c
+      ;background:#e6f5ea;
+      padding:3px 11px;
+      border-radius:9px;
+      display:inline-block;
+      box-shadow:0 1px 4px #b5d2ff29
+      ;margin: 4px 0;
+    }
+    .vessel-info { margin: 0 0 2px 0; 
+      font-size: 1.04em; 
+      display: flex; 
+      justify-content: space-between; 
+      align-items: center; 
+      gap: 12px;}
     .perimeter-map {
-      width: 420px; max-width: 100vw; height: 510px; border-radius: 22px; box-shadow: 0 10px 32px #475ca640;
-      border: 4px solid #f6f7fa; overflow: hidden; position: sticky; top: 45px; background: #fff; z-index: 8;
+      width: 420px; 
+      max-width: 100vw; 
+      height: 510px; 
+      border-radius: 22px; 
+      box-shadow: 0 10px 32px #475ca640;
+      border: 4px solid #f6f7fa; 
+      overflow: hidden; 
+      position: sticky; 
+      top: 45px; 
+      background: #fff; 
+      z-index: 8;
     }
     .leaflet-popup-content-wrapper, .leaflet-popup-tip { border-radius: 15px !important; }
     .leaflet-popup-content { font-size: 1.09em;}
