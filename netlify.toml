@@ -1,122 +1,38 @@
-# Configuration Netlify pour l'application de surveillance des navires
-# Ce fichier configure le déploiement, les fonctions serverless et les redirections
-
 [build]
-# Dossier de publication (racine du site)
 publish = "."
-
-# Dossier contenant les fonctions serverless
 functions = "netlify/functions"
-
-# Variables d'environnement pour le build
-[build.environment]
-# Commande de build corrigée 
 command = "echo 'Application de surveillance des navires prête pour le déploiement'"
-# Version de Node.js utilisée pour les fonctions serverless
+
+[build.environment]
 NODE_VERSION = "18"
 
-# Configuration des headers de sécurité pour toutes les pages
+# Headers de sécurité
 [[headers]]
 for = "/*"
 [headers.values]
-# Protection contre le clickjacking
 X-Frame-Options = "DENY"
-# Protection XSS
 X-XSS-Protection = "1; mode=block"
-# Empêche le sniffing MIME
 X-Content-Type-Options = "nosniff"
-# Politique de référent stricte
 Referrer-Policy = "strict-origin-when-cross-origin"
-# Politique de sécurité du contenu (CSP) pour l'application de surveillance
 Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' unpkg.com; style-src 'self' 'unsafe-inline' unpkg.com; img-src 'self' data: *.openstreetmap.org *.tile.openstreetmap.org; connect-src 'self' *.eurisportal.eu; font-src 'self' data:;"
 
-# Headers spécifiques pour les fonctions serverless (API)
+# Headers pour les fonctions
 [[headers]]
 for = "/.netlify/functions/*"
 [headers.values]
-# CORS pour permettre les appels depuis le frontend
 Access-Control-Allow-Origin = "*"
 Access-Control-Allow-Headers = "Content-Type, Authorization"
 Access-Control-Allow-Methods = "GET, POST, OPTIONS"
-# Pas de cache pour les données temps réel
 Cache-Control = "no-cache, no-store, must-revalidate"
-Pragma = "no-cache"
-Expires = "0"
 
-# Redirections pour maintenir la compatibilité avec d'anciennes URLs PHP
+# Redirections
 [[redirects]]
-# Redirection de l'ancien proxy PHP vers la fonction serverless
 from = "/euris_proxy.php"
 to = "/.netlify/functions/euris-proxy"
 status = 301
 force = true
 
 [[redirects]]
-# Redirection pour les anciennes URLs avec paramètres
-from = "/euris_proxy.php?*"
-to = "/.netlify/functions/euris-proxy?:splat"
-status = 301
-force = true
-
-# Configuration des fonctions serverless
-[functions]
-# Timeout de 30 secondes pour les fonctions (max pour Netlify gratuit)
-timeout = 30
-
-# Configuration spécifique pour la fonction euris-proxy
-[functions."euris-proxy"]
-# Variables d'environnement spécifiques à cette fonction
-[functions."euris-proxy".environment]
-# URL de base de l'API EuRIS
-EURIS_API_BASE = "https://www.eurisportal.eu/visuris/api"
-# Timeout pour les requêtes vers EuRIS (en millisecondes)
-EURIS_TIMEOUT = "25000"
-# Niveau de logging
-LOG_LEVEL = "info"
-
-# Règles de cache pour optimiser les performances
-[[headers]]
-for = "*.css"
-[headers.values]
-Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-for = "*.js"
-[headers.values]
-Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-for = "*.html"
-[headers.values]
-Cache-Control = "public, max-age=0, must-revalidate"
-
-# Configuration pour les erreurs 404 personnalisées
-[[redirects]]
 from = "/*"
 to = "/index.html"
 status = 200
-# Cette règle doit être en dernier pour servir l'application SPA
-
-# Variables d'environnement globales (à définir dans l'interface Netlify)
-# EURIS_DEFAULT_TOKEN = "votre_token_par_defaut" (optionnel)
-# NODE_ENV = "production"
-
-# Configuration des notifications de build
-[build.processing]
-# Optimisation automatique des images
-skip_processing = false
-
-# Configuration des plugins Netlify (si nécessaire)
-[[plugins]]
-package = "@netlify/plugin-lighthouse"
-
-[plugins.inputs.audits]
-# Audit de performance pour l'application de surveillance
-performance = true
-accessibility = true
-best-practices = true
-seo = true
-
-# Configuration de la gestion des formulaires (si ajout futur)
-[build.processing.html]
-pretty_urls = true
