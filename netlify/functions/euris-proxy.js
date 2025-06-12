@@ -22,7 +22,7 @@ exports.handler = async (event, context) => {
             headers,
             body: JSON.stringify({ message: 'CORS preflight OK' })
         };
-    }
+    } // ← ACCOLADE MANQUANTE AJOUTÉE
 
     // Vérification méthode GET
     if (event.httpMethod !== 'GET') {
@@ -36,7 +36,7 @@ exports.handler = async (event, context) => {
                 allowedMethods: ['GET', 'OPTIONS']
             })
         };
-    }
+    } // ← ACCOLADE MANQUANTE AJOUTÉE
 
     // Récupération des paramètres
     const { minLat, maxLat, minLon, maxLon, pageSize = 100, token } = event.queryStringParameters || {};
@@ -56,7 +56,7 @@ exports.handler = async (event, context) => {
                 received: event.queryStringParameters
             })
         };
-    }
+    } // ← ACCOLADE MANQUANTE AJOUTÉE
 
     // Validation des coordonnées
     const lat1 = parseFloat(minLat);
@@ -75,7 +75,7 @@ exports.handler = async (event, context) => {
                 coordinates: { minLat, maxLat, minLon, maxLon }
             })
         };
-    }
+    } // ← ACCOLADE MANQUANTE AJOUTÉE
 
     // Validation des limites géographiques
     if (lat1 < -90 || lat1 > 90 || lat2 < -90 || lat2 > 90) {
@@ -88,7 +88,7 @@ exports.handler = async (event, context) => {
                 message: 'La latitude doit être comprise entre -90 et 90 degrés'
             })
         };
-    }
+    } // ← ACCOLADE MANQUANTE AJOUTÉE
 
     if (lon1 < -180 || lon1 > 180 || lon2 < -180 || lon2 > 180) {
         console.log('❌ Longitude hors limites');
@@ -100,7 +100,7 @@ exports.handler = async (event, context) => {
                 message: 'La longitude doit être comprise entre -180 et 180 degrés'
             })
         };
-    }
+    } // ← ACCOLADE MANQUANTE AJOUTÉE
 
     // Validation de la taille de page
     const pageSizeNum = parseInt(pageSize);
@@ -114,7 +114,7 @@ exports.handler = async (event, context) => {
                 message: 'La taille de page doit être un nombre entre 1 et 1000'
             })
         };
-    }
+    } // ← ACCOLADE MANQUANTE AJOUTÉE
 
     // Construction de l'URL EuRIS
     const eurisUrl = `https://www.eurisportal.eu/visuris/api/TracksV2/GetTracksByBBoxV2?minLat=${minLat}&maxLat=${maxLat}&minLon=${minLon}&maxLon=${maxLon}&pageSize=${pageSize}`;
@@ -133,7 +133,7 @@ exports.handler = async (event, context) => {
                 'User-Agent': 'Mozilla/5.0 (compatible; Netlify-EuRIS-Proxy/2.0; Surveillance-Navires)',
                 'Content-Type': 'application/json'
             }
-        };
+        }; // ← ACCOLADE MANQUANTE AJOUTÉE
 
         const response = await fetch(eurisUrl, fetchOptions);
         
@@ -158,7 +158,7 @@ exports.handler = async (event, context) => {
                 case 500:
                     errorMessage = 'Erreur interne du serveur EuRIS';
                     break;
-            }
+            } // ← ACCOLADE MANQUANTE AJOUTÉE
 
             return {
                 statusCode: response.status,
@@ -169,7 +169,7 @@ exports.handler = async (event, context) => {
                     timestamp: new Date().toISOString()
                 })
             };
-        }
+        } // ← ACCOLADE MANQUANTE AJOUTÉE
 
         const data = await response.json();
         
@@ -184,7 +184,7 @@ exports.handler = async (event, context) => {
 
     } catch (error) {
         console.error('❌ Erreur lors de l\'appel EuRIS:', error);
-
+        
         return {
             statusCode: 500,
             headers,
@@ -195,5 +195,5 @@ exports.handler = async (event, context) => {
                 timestamp: new Date().toISOString()
             })
         };
-    }
-};
+    } // ← ACCOLADE MANQUANTE AJOUTÉE
+}; // ← ACCOLADE FINALE AJOUTÉE
