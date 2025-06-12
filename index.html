@@ -141,6 +141,13 @@
             box-shadow: 0 6px 16px rgba(0,123,255,0.4);
         }
 
+        .btn:disabled {
+            background: #6c757d;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
         .content {
             display: flex;
             height: 800px;
@@ -324,6 +331,24 @@
             border: 1px solid #f5c6cb;
         }
 
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px;
+            border: 1px solid #c3e6cb;
+        }
+
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px;
+            border: 1px solid #bee5eb;
+        }
+
         /* Panneau d'attention pour 1km */
         .panneau-attention {
             position: fixed;
@@ -347,6 +372,33 @@
             0%, 100% { transform: translate(-50%, -50%) rotate(0deg); }
             25% { transform: translate(-50%, -50%) rotate(-2deg); }
             75% { transform: translate(-50%, -50%) rotate(2deg); }
+        }
+
+        /* Status indicator */
+        .status-indicator {
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .status-connecting {
+            background-color: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeaa7;
+        }
+
+        .status-connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status-error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
         }
 
         /* Responsive */
@@ -404,8 +456,13 @@
                     <input type="number" id="rayon" value="5" min="1" max="50">
                 </div>
                 <div>
-                    <button class="btn" onclick="demarrerSurveillance()">🔍 Démarrer la surveillance</button>
+                    <button class="btn" id="btnSurveillance" onclick="demarrerSurveillance()">🔍 Démarrer la surveillance</button>
                 </div>
+            </div>
+            
+            <!-- Indicateur de statut -->
+            <div id="statusIndicator" class="status-indicator" style="display: none;">
+                <span id="statusText">Prêt</span>
             </div>
         </div>
 
@@ -473,6 +530,40 @@
         let intervalleCompteur;
         let tempsRestant = 10;
         let naviresEnDanger = new Set(); // Pour éviter les notifications répétées
+
+        // Affichage du statut de connexion
+        function afficherStatut(type, message) {
+            const indicator = document.getElementById('statusIndicator');
+            const text = document.getElementById('statusText');
+            
+            indicator.style.display = 'block';
+            indicator.className = `status-indicator status-${type}`;
+            text.textContent = message;
+            
+            console.log(`📊 Statut: ${type} - ${message}`);
+        }
+
+        // Affichage des messages dans la liste des navires
+        function afficherMessage(type, titre, message, details = null) {
+            const listeElement = document.getElementById('listeNavires');
+            
+            let detailsHtml = '';
+            if (details) {
+                if (typeof details === 'object') {
+                    detailsHtml = `<div style="margin-top: 10px; font-size: 12px; color: #666;"><pre>${JSON.stringify(details, null, 2)}</pre></div>`;
+                } else {
+                    detailsHtml = `<div style="margin-top: 10px; font-size: 12px; color: #666;">${details}</div>`;
+                }
+            }
+            
+            listeElement.innerHTML = `
+                <div class="${type}">
+                    <strong>${titre}</strong><br>
+                    ${message}
+                    ${detailsHtml}
+                </div>
+            `;
+        }
 
         // Initialisation de la carte
         function initMap() {
@@ -830,6 +921,11 @@
                 throw new Error('Token API requis');
             }
 
+            // Validation des coordonnées
+            if (isNaN(lat) || isNaN(lon) || isNaN(rayon)) {
+                throw new Error('Coordonnées invalides');
+            }
+
             // Calcul de la bounding box pour la zone de surveillance
             const kmToDegrees = rayon / 111; // Approximation: 1 degré ≈ 111 km
             const minLat = lat - kmToDegrees;
@@ -837,28 +933,98 @@
             const minLon = lon - (kmToDegrees / Math.cos(lat * Math.PI / 180));
             const maxLon = lon + (kmToDegrees / Math.cos(lat * Math.PI / 180));
 
-            // Appel à la fonction serverless Netlify
-            const url = `/.netlify/functions/euris-proxy?minLat=${minLat}&maxLat=${maxLat}&minLon=${minLon}&maxLon=${maxLon}&token=${encodeURIComponent(token)}&pageSize=100`;
+            // Construction de l'URL avec paramètres
+            const params = new URLSearchParams({
+                minLat: minLat.toString(),
+                maxLat: maxLat.toString(),
+                minLon: minLon.toString(),
+                maxLon: maxLon.toString(),
+                pageSize: '100'
+            });
+
+            const url = `/.netlify/functions/euris-proxy?${params.toString()}`;
             
-            const response = await fetch(url);
+            console.log('🌐 URL appelée:', url);
+            
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                }
+            });
+            
+            console.log('📡 Réponse reçue - Status:', response.status);
+            console.log('📡 Headers de réponse:', Object.fromEntries(response.headers));
             
             if (!response.ok) {
-                throw new Error(`Erreur API: ${response.status} ${response.statusText}`);
+                let errorMessage = `Erreur HTTP ${response.status}: ${response.statusText}`;
+                let errorDetails = null;
+                
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.error || errorMessage;
+                    errorDetails = errorData;
+                    console.error('❌ Détails de l\'erreur:', errorData);
+                } catch (e) {
+                    console.error('❌ Impossible de parser l\'erreur JSON');
+                    const errorText = await response.text();
+                    errorDetails = errorText;
+                    console.error('❌ Réponse d\'erreur (texte):', errorText);
+                }
+                
+                const error = new Error(errorMessage);
+                error.details = errorDetails;
+                error.status = response.status;
+                throw error;
             }
 
             const data = await response.json();
+            console.log('📊 Données reçues:', data);
             
-            if (data.error) {
-                throw new Error(data.error);
+            // Validation de la structure des données
+            if (!data) {
+                throw new Error('Réponse vide de l\'API');
+            }
+            
+            if (!data.tracks && !Array.isArray(data)) {
+                console.warn('⚠️ Structure de données inattendue:', Object.keys(data));
+                console.log('📊 Données complètes:', data);
             }
 
-            // Filtrage des navires dans la zone de surveillance (5km)
-            const naviresFiltrés = (data.tracks || []).filter(navire => {
+            // Extraction des navires selon la structure de données
+            let naviresData = [];
+            if (data.tracks && Array.isArray(data.tracks)) {
+                naviresData = data.tracks;
+            } else if (Array.isArray(data)) {
+                naviresData = data;
+            } else if (data.data && Array.isArray(data.data)) {
+                naviresData = data.data;
+            } else {
+                console.warn('⚠️ Aucun tableau de navires trouvé dans la réponse');
+                naviresData = [];
+            }
+
+            console.log(`📊 ${naviresData.length} navires trouvés dans la réponse`);
+            
+            if (naviresData.length > 0) {
+                console.log('📊 Premier navire (exemple):', naviresData[0]);
+            }
+
+            // Filtrage des navires dans la zone de surveillance (5km) avec validation des coordonnées
+            const naviresFiltrés = naviresData.filter(navire => {
+                // Vérification que le navire a des coordonnées valides
+                if (!navire || typeof navire.latitude !== 'number' || typeof navire.longitude !== 'number') {
+                    console.warn('⚠️ Navire sans coordonnées valides:', navire);
+                    return false;
+                }
+                
                 const distance = calculerDistance(lat, lon, navire.latitude, navire.longitude);
                 return distance <= ZONES.SURVEILLANCE;
             });
 
-            console.log(`✅ ${naviresFiltrés.length} navires récupérés dans la zone de ${rayon}km`);
+            console.log(`✅ ${naviresFiltrés.length} navires dans la zone de ${rayon}km après filtrage`);
             return naviresFiltrés;
         }
 
@@ -866,27 +1032,67 @@
         async function mettreAJourDonnees() {
             try {
                 console.log('🔄 Début de la mise à jour des données');
+                afficherStatut('connecting', 'Connexion à l\'API EuRIS...');
                 
                 // Récupération des nouveaux données
                 navires = await recupererNavires();
+                
+                console.log(`📊 ${navires.length} navires récupérés`);
                 
                 // Mise à jour de tous les éléments de l'interface
                 mettreAJourMarqueurs();
                 mettreAJourListeNavires();
                 mettreAJourStatistiques();
                 
+                // Affichage du statut de succès
+                if (navires.length > 0) {
+                    afficherStatut('connected', `${navires.length} navires surveillés`);
+                } else {
+                    afficherStatut('connected', 'Aucun navire dans la zone');
+                    afficherMessage('info', 'Zone claire', 'Aucun navire détecté dans la zone de surveillance.');
+                }
+                
                 console.log('✅ Mise à jour terminée avec succès');
                 
             } catch (error) {
                 console.error('❌ Erreur lors de la mise à jour:', error);
                 
-                // Affichage de l'erreur dans l'interface
-                document.getElementById('listeNavires').innerHTML = `
-                    <div class="error">
-                        <strong>Erreur de récupération:</strong><br>
-                        ${error.message}
-                    </div>
-                `;
+                // Affichage du statut d'erreur
+                afficherStatut('error', 'Erreur de connexion');
+                
+                // Affichage de l'erreur dans l'interface avec détails
+                let messageErreur = error.message;
+                let details = null;
+                
+                if (error.details) {
+                    details = error.details;
+                }
+                
+                // Messages d'erreur plus explicites selon le type
+                if (error.status) {
+                    switch (error.status) {
+                        case 401:
+                            messageErreur = 'Token d\'authentification invalide ou expiré';
+                            break;
+                        case 403:
+                            messageErreur = 'Accès interdit - permissions insuffisantes';
+                            break;
+                        case 404:
+                            messageErreur = 'Service EuRIS non trouvé';
+                            break;
+                        case 429:
+                            messageErreur = 'Trop de requêtes - attendez avant de réessayer';
+                            break;
+                        case 500:
+                        case 502:
+                        case 503:
+                        case 504:
+                            messageErreur = 'Service EuRIS temporairement indisponible';
+                            break;
+                    }
+                }
+                
+                afficherMessage('error', 'Erreur de récupération', messageErreur, details);
             }
         }
 
@@ -925,6 +1131,14 @@
             // Masquage du compteur
             document.getElementById('compteurRefresh').style.display = 'none';
             
+            // Réinitialisation du bouton
+            const btn = document.getElementById('btnSurveillance');
+            btn.textContent = '🔍 Démarrer la surveillance';
+            btn.disabled = false;
+            
+            // Masquage du statut
+            document.getElementById('statusIndicator').style.display = 'none';
+            
             // Nettoyage des alertes actives
             naviresEnDanger.clear();
             
@@ -934,23 +1148,50 @@
             
             const panneau = document.getElementById('panneauAttention');
             if (panneau) panneau.remove();
+            
+            // Réinitialisation de l'affichage
+            document.getElementById('listeNavires').innerHTML = '<div class="loading">Cliquez sur "Démarrer la surveillance" pour commencer...</div>';
         }
 
         // Démarrage de la surveillance (fonction appelée par le bouton)
         async function demarrerSurveillance() {
             console.log('🚀 Démarrage de la surveillance automatique');
             
-            // Arrêt de la surveillance précédente si active
+            const btn = document.getElementById('btnSurveillance');
+            
+            // Si la surveillance est active, l'arrêter
             if (surveillanceActive) {
                 arreterSurveillance();
+                return;
+            }
+            
+            // Validation des champs requis
+            const token = document.getElementById('token').value.trim();
+            if (!token) {
+                alert('Veuillez saisir votre token API EuRIS');
+                return;
+            }
+            
+            const lat = parseFloat(document.getElementById('latitude').value);
+            const lon = parseFloat(document.getElementById('longitude').value);
+            const rayon = parseFloat(document.getElementById('rayon').value);
+            
+            if (isNaN(lat) || isNaN(lon) || isNaN(rayon)) {
+                alert('Veuillez vérifier les coordonnées et le rayon');
+                return;
             }
             
             try {
-                // Première récupération immédiate
+                // Mise à jour du bouton
+                btn.textContent = '⏹️ Arrêter la surveillance';
+                btn.disabled = true;
+                
+                // Première récupération immédiate pour valider la connexion
                 await mettreAJourDonnees();
                 
                 // Activation de la surveillance
                 surveillanceActive = true;
+                btn.disabled = false;
                 
                 // Démarrage du compteur de rafraîchissement (10 secondes)
                 tempsRestant = 10;
@@ -960,7 +1201,20 @@
                 
             } catch (error) {
                 console.error('❌ Erreur lors du démarrage:', error);
-                alert('Erreur lors du démarrage de la surveillance: ' + error.message);
+                
+                // Réinitialisation du bouton en cas d'erreur
+                btn.textContent = '🔍 Démarrer la surveillance';
+                btn.disabled = false;
+                
+                // Affichage de l'erreur
+                let messageErreur = error.message;
+                if (error.status === 401) {
+                    messageErreur = 'Token invalide. Vérifiez votre token API EuRIS.';
+                } else if (error.status === 403) {
+                    messageErreur = 'Accès refusé. Vérifiez les permissions de votre token.';
+                }
+                
+                alert('Erreur lors du démarrage de la surveillance:\n' + messageErreur);
             }
         }
 

@@ -3,6 +3,7 @@ exports.handler = async (event, context) => {
     console.log('🚀 Démarrage du proxy EuRIS');
     console.log('📝 Méthode HTTP:', event.httpMethod);
     console.log('📝 Paramètres reçus:', event.queryStringParameters);
+    console.log('📝 Headers reçus:', event.headers);
 
     // Headers CORS pour toutes les réponses
     const headers = {
@@ -39,22 +40,43 @@ exports.handler = async (event, context) => {
         };
     }
 
+    // Récupération du token depuis les headers Authorization
+    let token = null;
+    const authHeader = event.headers.authorization || event.headers.Authorization;
+    
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7); // Supprime "Bearer "
+        console.log('🔑 Token récupéré depuis les headers Authorization');
+    } else {
+        console.log('❌ Header Authorization manquant ou invalide');
+        return {
+            statusCode: 401,
+            headers,
+            body: JSON.stringify({
+                error: 'Authorization header required',
+                message: 'Le header Authorization avec un token Bearer est requis',
+                receivedHeaders: Object.keys(event.headers),
+                example: 'Authorization: Bearer YOUR_TOKEN_HERE'
+            })
+        };
+    }
+
     // Récupération et validation des paramètres
     const params = event.queryStringParameters || {};
-    const { minLat, maxLat, minLon, maxLon, pageSize = 100, token } = params;
+    const { minLat, maxLat, minLon, maxLon, pageSize = 100 } = params;
 
     console.log('🔍 Validation des paramètres...');
 
     // Vérification des paramètres obligatoires
-    if (!minLat || !maxLat || !minLon || !maxLon || !token) {
+    if (!minLat || !maxLat || !minLon || !maxLon) {
         console.log('❌ Paramètres manquants');
         return {
             statusCode: 400,
             headers,
             body: JSON.stringify({
                 error: 'Missing required parameters',
-                message: 'Les paramètres minLat, maxLat, minLon, maxLon et token sont obligatoires',
-                required: ['minLat', 'maxLat', 'minLon', 'maxLon', 'token'],
+                message: 'Les paramètres minLat, maxLat, minLon, maxLon sont obligatoires',
+                required: ['minLat', 'maxLat', 'minLon', 'maxLon'],
                 received: Object.keys(params)
             })
         };
@@ -71,7 +93,7 @@ exports.handler = async (event, context) => {
     // Vérification que les coordonnées sont des nombres valides
     for (const [key, value] of Object.entries(coordinates)) {
         if (isNaN(value)) {
-            console.log(`❌ Coordonnée invalide: ${key} = ${params[key.replace('minLat', 'minLat').replace('maxLat', 'maxLat').replace('minLon', 'minLon').replace('maxLon', 'maxLon')]}`);
+            console.log(`❌ Coordonnée invalide: ${key} = ${params[key.replace('coordinates.', '')]}`);
             return {
                 statusCode: 400,
                 headers,
@@ -86,7 +108,7 @@ exports.handler = async (event, context) => {
     }
 
     // Validation des limites géographiques
-    if (coordinates.minLat < -90 || coordinates.maxLat > 90 || coordinates.minLat > coordinates.maxLat) {
+    if (coordinates.minLat < -90 || coordinates.maxLat > 90 || coordinates.minLat >= coordinates.maxLat) {
         console.log('❌ Latitude invalide');
         return {
             statusCode: 400,
@@ -99,7 +121,7 @@ exports.handler = async (event, context) => {
         };
     }
 
-    if (coordinates.minLon < -180 || coordinates.maxLon > 180 || coordinates.minLon > coordinates.maxLon) {
+    if (coordinates.minLon < -180 || coordinates.maxLon > 180 || coordinates.minLon >= coordinates.maxLon) {
         console.log('❌ Longitude invalide');
         return {
             statusCode: 400,
@@ -136,6 +158,19 @@ exports.handler = async (event, context) => {
     try {
         console.log('📡 Appel à l\'API EuRIS en cours...');
         
+        // Import dynamique de node-fetch pour les environnements Netlify
+        let fetch;
+        try {
+            fetch = (await import('node-fetch')).default;
+        } catch (e) {
+            // Fallback vers fetch global si disponible
+            fetch = globalThis.fetch;
+        }
+        
+        if (!fetch) {
+            throw new Error('fetch non disponible dans cet environnement');
+        }
+        
         // Configuration de la requête vers EuRIS
         const fetchOptions = {
             method: 'GET',
@@ -144,16 +179,28 @@ exports.handler = async (event, context) => {
                 'Accept': 'application/json',
                 'User-Agent': 'Mozilla/5.0 (compatible; Netlify-EuRIS-Proxy/2.0; Surveillance-Navires)',
                 'Content-Type': 'application/json'
-            },
-            // Timeout de 30 secondes
-            timeout: 30000
+            }
         };
 
-        // Appel à l'API EuRIS
-        const response = await fetch(eurisUrl, fetchOptions);
+        // Appel à l'API EuRIS avec timeout
+        console.log('📡 Envoi de la requête vers EuRIS...');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 30000); // Timeout de 30 secondes
+        
+        const response = await fetch(eurisUrl, {
+            ...fetchOptions,
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
         
         console.log('📊 Réponse EuRIS - Status:', response.status);
-        console.log('📊 Réponse EuRIS - Headers:', Object.fromEntries(response.headers));
+        console.log('📊 Réponse EuRIS - StatusText:', response.statusText);
+
+        // Lecture du contenu de la réponse
+        const responseText = await response.text();
+        console.log('📊 Taille de la réponse:', responseText.length, 'caractères');
+        console.log('📊 Début de la réponse:', responseText.substring(0, 200));
 
         // Gestion des erreurs HTTP
         if (!response.ok) {
@@ -192,19 +239,8 @@ exports.handler = async (event, context) => {
                     errorDetails = 'Erreur inconnue de l\'API EuRIS';
             }
 
-            // Tentative de récupération du message d'erreur détaillé
-            let apiErrorDetails = null;
-            try {
-                const errorText = await response.text();
-                apiErrorDetails = errorText;
-            } catch (e) {
-                console.log('Impossible de lire le corps de la réponse d\'erreur');
-            }
-
             console.log('❌ Erreur API EuRIS:', errorMessage);
-            if (apiErrorDetails) {
-                console.log('❌ Détails de l\'erreur API:', apiErrorDetails);
-            }
+            console.log('❌ Réponse d\'erreur:', responseText);
 
             return {
                 statusCode: response.status,
@@ -213,7 +249,7 @@ exports.handler = async (event, context) => {
                     error: errorMessage,
                     details: errorDetails,
                     httpStatus: response.status,
-                    apiResponse: apiErrorDetails,
+                    apiResponse: responseText,
                     timestamp: new Date().toISOString(),
                     requestUrl: eurisUrl.replace(token, '[TOKEN_HIDDEN]')
                 })
@@ -221,33 +257,127 @@ exports.handler = async (event, context) => {
         }
 
         // Parsing de la réponse JSON
-        const data = await response.json();
+        let data;
+        try {
+            data = JSON.parse(responseText);
+        } catch (parseError) {
+            console.error('❌ Erreur de parsing JSON:', parseError);
+            console.log('📊 Réponse brute:', responseText);
+            
+            return {
+                statusCode: 500,
+                headers,
+                body: JSON.stringify({
+                    error: 'Invalid JSON response from EuRIS API',
+                    message: 'La réponse de l\'API EuRIS n\'est pas au format JSON valide',
+                    parseError: parseError.message,
+                    responsePreview: responseText.substring(0, 500),
+                    timestamp: new Date().toISOString()
+                })
+            };
+        }
         
         console.log('✅ Données EuRIS récupérées avec succès');
-        console.log('📊 Nombre de tracks reçues:', data.tracks ? data.tracks.length : 0);
-        console.log('📊 Structure des données:', Object.keys(data));
-
-        // Validation de la structure des données reçues
-        if (!data.tracks) {
-            console.log('⚠️ Aucune propriété "tracks" dans la réponse');
+        console.log('📊 Structure des données reçues:', Object.keys(data));
+        
+        // Validation et extraction des tracks
+        let tracks = [];
+        if (data.tracks && Array.isArray(data.tracks)) {
+            tracks = data.tracks;
+        } else if (Array.isArray(data)) {
+            tracks = data;
+        } else if (data.data && Array.isArray(data.data)) {
+            tracks = data.data;
+        } else if (data.result && Array.isArray(data.result)) {
+            tracks = data.result;
+        } else {
+            console.warn('⚠️ Structure de données inattendue, recherche de tableaux...');
+            // Recherche récursive de tableaux dans la réponse
+            for (const [key, value] of Object.entries(data)) {
+                if (Array.isArray(value) && value.length > 0) {
+                    console.log(`📊 Tableau trouvé dans data.${key}:`, value.length, 'éléments');
+                    tracks = value;
+                    break;
+                }
+            }
         }
 
-        // Retour des données avec informations additionnelles
+        console.log('📊 Nombre de tracks extraites:', tracks.length);
+        
+        if (tracks.length > 0) {
+            console.log('📊 Premier track (exemple):', JSON.stringify(tracks[0], null, 2));
+            
+            // Validation des propriétés des tracks
+            const premierTrack = tracks[0];
+            const proprietes = Object.keys(premierTrack);
+            console.log('📊 Propriétés disponibles dans les tracks:', proprietes);
+            
+            // Vérification des coordonnées
+            if (!premierTrack.latitude && !premierTrack.lat && !premierTrack.Latitude) {
+                console.warn('⚠️ Aucune propriété de latitude trouvée dans les tracks');
+            }
+            if (!premierTrack.longitude && !premierTrack.lon && !premierTrack.Longitude) {
+                console.warn('⚠️ Aucune propriété de longitude trouvée dans les tracks');
+            }
+        }
+
+        // Normalisation des données pour assurer la compatibilité
+        const tracksNormalisees = tracks.map(track => {
+            // Normalisation des noms de propriétés
+            const trackNormalise = {
+                // Coordonnées (plusieurs formats possibles)
+                latitude: track.latitude || track.lat || track.Latitude || track.LAT,
+                longitude: track.longitude || track.lon || track.Longitude || track.LON,
+                
+                // Informations du navire
+                mmsi: track.mmsi || track.MMSI || track.id,
+                shipName: track.shipName || track.ship_name || track.name || track.vesselName || track.NAME,
+                shipType: track.shipType || track.ship_type || track.type || track.vesselType || track.TYPE,
+                
+                // Vitesse et navigation
+                speed: track.speed || track.Speed || track.SOG || track.sog,
+                course: track.course || track.Course || track.COG || track.cog,
+                heading: track.heading || track.Heading || track.HDG || track.hdg,
+                
+                // Dimensions
+                length: track.length || track.Length || track.LOA || track.loa,
+                width: track.width || track.Width || track.beam || track.BEAM,
+                
+                // Statut et temps
+                status: track.status || track.Status || track.navStatus,
+                timestamp: track.timestamp || track.Timestamp || track.time || track.lastUpdate,
+                
+                // Données brutes pour débogage
+                _original: track
+            };
+            
+            return trackNormalise;
+        });
+
+        console.log('📊 Tracks normalisées:', tracksNormalisees.length);
+
+        // Retour des données avec métadonnées enrichies
+        const response_data = {
+            tracks: tracksNormalisees,
+            _metadata: {
+                timestamp: new Date().toISOString(),
+                source: 'EuRIS API via Netlify Proxy',
+                originalTrackCount: tracks.length,
+                normalizedTrackCount: tracksNormalisees.length,
+                requestParams: {
+                    bbox: coordinates,
+                    pageSize: pageSizeNum
+                },
+                dataStructure: Object.keys(data),
+                apiResponseSize: responseText.length,
+                processingTime: Date.now()
+            }
+        };
+
         return {
             statusCode: 200,
             headers,
-            body: JSON.stringify({
-                ...data,
-                _metadata: {
-                    timestamp: new Date().toISOString(),
-                    source: 'EuRIS API via Netlify Proxy',
-                    trackCount: data.tracks ? data.tracks.length : 0,
-                    requestParams: {
-                        bbox: coordinates,
-                        pageSize: pageSizeNum
-                    }
-                }
-            })
+            body: JSON.stringify(response_data)
         };
 
     } catch (error) {
@@ -256,26 +386,36 @@ exports.handler = async (event, context) => {
         // Gestion des différents types d'erreurs
         let errorType = 'Unknown error';
         let errorMessage = error.message;
+        let statusCode = 500;
         
-        if (error.name === 'TypeError' && error.message.includes('fetch')) {
+        if (error.name === 'AbortError') {
+            errorType = 'Timeout error';
+            errorMessage = 'L\'API EuRIS a mis trop de temps à répondre (timeout 30s)';
+            statusCode = 504;
+        } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
             errorType = 'Network error';
-            errorMessage = 'Impossible de contacter l\'API EuRIS. Vérifiez votre connexion internet.';
+            errorMessage = 'Impossible de contacter l\'API EuRIS. Vérifiez la connectivité réseau.';
+            statusCode = 503;
         } else if (error.name === 'SyntaxError') {
             errorType = 'JSON parsing error';
             errorMessage = 'La réponse de l\'API EuRIS n\'est pas au format JSON valide.';
+            statusCode = 502;
         } else if (error.code === 'ENOTFOUND') {
             errorType = 'DNS error';
             errorMessage = 'Impossible de résoudre le nom de domaine de l\'API EuRIS.';
+            statusCode = 503;
         } else if (error.code === 'ECONNREFUSED') {
             errorType = 'Connection refused';
             errorMessage = 'La connexion à l\'API EuRIS a été refusée.';
+            statusCode = 503;
         } else if (error.code === 'ETIMEDOUT') {
             errorType = 'Timeout error';
             errorMessage = 'L\'API EuRIS a mis trop de temps à répondre.';
+            statusCode = 504;
         }
 
         return {
-            statusCode: 500,
+            statusCode: statusCode,
             headers,
             body: JSON.stringify({
                 error: 'Internal proxy error',
@@ -284,7 +424,8 @@ exports.handler = async (event, context) => {
                 details: error.message,
                 stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
                 timestamp: new Date().toISOString(),
-                requestUrl: eurisUrl.replace(token, '[TOKEN_HIDDEN]')
+                requestUrl: eurisUrl.replace(token, '[TOKEN_HIDDEN]'),
+                errorCode: error.code || 'UNKNOWN'
             })
         };
     }
