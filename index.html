@@ -349,29 +349,30 @@
             border: 1px solid #bee5eb;
         }
 
-        /* Panneau d'attention pour 1km */
+        /* Panneau d'attention pour 1km - Haut gauche */
         .panneau-attention {
             position: fixed;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
+            top: 80px;
+            left: 20px;
             background: linear-gradient(45deg, #ff9800, #f57c00);
             color: white;
-            padding: 30px;
+            padding: 20px;
             border-radius: 15px;
-            font-size: 24px;
+            font-size: 18px;
             font-weight: bold;
             z-index: 10001;
             box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            text-align: center;
+            text-align: left;
             border: 3px solid #fff;
-            animation: shake 0.5s infinite;
+            animation: shake-left 0.5s infinite;
+            max-width: 350px;
+            min-width: 300px;
         }
 
-        @keyframes shake {
-            0%, 100% { transform: translate(-50%, -50%) rotate(0deg); }
-            25% { transform: translate(-50%, -50%) rotate(-2deg); }
-            75% { transform: translate(-50%, -50%) rotate(2deg); }
+        @keyframes shake-left {
+            0%, 100% { transform: translateX(0) rotate(0deg); }
+            25% { transform: translateX(-2px) rotate(-1deg); }
+            75% { transform: translateX(2px) rotate(1deg); }
         }
 
         /* Status indicator */
@@ -694,12 +695,15 @@
             panneau.id = 'panneauAttention';
             panneau.className = 'panneau-attention';
             panneau.innerHTML = `
-                ⚠️ ATTENTION ⚠️<br>
-                <div style="margin: 10px 0; font-size: 18px;">
-                    Navire "${navire.shipName || 'Inconnu'}" à moins de 1km !
+                <div style="display: flex; align-items: center; margin-bottom: 8px;">
+                    <span style="font-size: 24px; margin-right: 10px;">⚠️</span>
+                    <strong>ATTENTION - ZONE 1KM</strong>
+                </div>
+                <div style="font-size: 16px; margin-bottom: 8px;">
+                    Navire: <strong>"${navire.shipName || 'Inconnu'}"</strong>
                 </div>
                 <div style="font-size: 14px; opacity: 0.9;">
-                    Distance: ${Math.round(calculerDistance(BASE_COORDS.lat, BASE_COORDS.lon, navire.latitude, navire.longitude))}m
+                    Distance: <strong>${Math.round(calculerDistance(BASE_COORDS.lat, BASE_COORDS.lon, navire.latitude, navire.longitude))}m</strong>
                 </div>
             `;
             
