@@ -636,11 +636,11 @@
             cercles.forEach(cercle => map.removeLayer(cercle));
             cercles = [];
 
-            // COMMENTAIRE : Chemin vers votre image PNG dans le dossier assets
+            // COMMENTAIRE : Remplacez l'URL ci-dessous par l'adresse de votre image PNG
             // Coordonnées de la base : latitude = 48.853229, longitude = 2.225328
             // Taille recommandée pour l'image : 32x32 pixels ou 64x64 pixels maximum
             // Format PNG recommandé pour la transparence
-            const imageUrl = './assets/1.png'; // Remplacez "votre-image.png" par le nom exact de votre fichier
+            const imageUrl = ''; // Remplacez cette ligne par votre URL d'image
             
             // Création du marqueur de base avec image personnalisée
             const baseIcon = L.icon({
@@ -799,20 +799,17 @@
             };
         }
 
-        // Affichage du panneau d'attention pour les navires EN MOUVEMENT à moins de 2km
-        function afficherPanneauAttention(naviresVigilance) {
+        // Affichage du panneau d'attention pour les navires à moins de 1km
+        function afficherPanneauAttention(naviresAlerte) {
             // Suppression de l'ancien panneau
             const panneauExistant = document.getElementById('panneauAttention');
             if (panneauExistant) {
                 panneauExistant.remove();
             }
 
-            // Filtrer seulement les navires EN MOUVEMENT dans la zone de vigilance (2km)
-            const naviresEnMouvementVigilance = naviresVigilance.filter(navire => estEnMouvement(navire));
+            if (naviresAlerte.length === 0) return;
 
-            if (naviresEnMouvementVigilance.length === 0) return;
-
-            console.log('⚠️ Affichage panneau attention pour', naviresEnMouvementVigilance.length, 'navire(s) en mouvement');
+            console.log('⚠️ Affichage panneau attention pour', naviresAlerte.length, 'navire(s)');
             
             const panneau = document.createElement('div');
             panneau.id = 'panneauAttention';
@@ -820,17 +817,17 @@
             
             let contenuPanneau = `
                 <div style="display: flex; align-items: center; margin-bottom: 15px;">
-                    <span style="font-size: 24px; margin-right: 10px;">🟠</span>
-                    <strong>NAVIRES EN MOUVEMENT - ZONE 2KM</strong>
+                    <span style="font-size: 24px; margin-right: 10px;">🚨</span>
+                    <strong>ZONE D'ALERTE - 1KM</strong>
                 </div>
             `;
             
-            naviresEnMouvementVigilance.forEach(navire => {
+            naviresAlerte.forEach(navire => {
                 const analyse = analyserNavire(navire);
                 contenuPanneau += `
                     <div class="navire-panneau">
                         <div style="font-size: 16px; margin-bottom: 5px;">
-                            <strong>"${navire.shipName || 'Inconnu'}"</strong> 🔄
+                            <strong>"${navire.shipName || 'Inconnu'}"</strong>
                         </div>
                         <div style="font-size: 14px; opacity: 0.9;">
                             Distance: <strong>${analyse.distance}m</strong><br>
@@ -1105,21 +1102,15 @@
                 return analyse.statut === 'alerte';
             });
             
-            // Navires en vigilance (zone orange 2km)
-            const naviresZoneVigilance = naviresAfficher.filter(navire => {
-                const analyse = analyserNavire(navire);
-                return analyse.statut === 'vigilance' || analyse.statut === 'alerte'; // Inclut aussi les navires en zone rouge
-            });
-            
             // Navires en mouvement dans la zone d'alerte (pour bannière rouge)
             const naviresAlerteMouvement = naviresZoneAlerte.filter(navire => estEnMouvement(navire));
             
-            // 🟠 PANNEAU ORANGE : Affichage des navires EN MOUVEMENT dans la zone de 2km
-            if (naviresZoneVigilance.length > 0) {
-                afficherPanneauAttention(naviresZoneVigilance);
+            // Affichage du panneau orange avec tous les navires < 1km
+            if (naviresZoneAlerte.length > 0) {
+                afficherPanneauAttention(naviresZoneAlerte);
             }
             
-            // 🔴 BANNIÈRE ROUGE : Déclenchement seulement pour les navires en mouvement dans la zone de 1km
+            // Déclenchement de l'alerte rouge seulement pour les navires en mouvement
             if (naviresAlerteMouvement.length > 0) {
                 // Vérifier les nouveaux navires en alerte
                 naviresAlerteMouvement.forEach(navire => {
