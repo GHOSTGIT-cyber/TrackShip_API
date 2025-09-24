@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🛰️ Surveillance des navires - Seine</title>
+    <title>🛰️ Surveillance des navires - Base EFoil</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="assets/style.css" />
     
 </head>
 <body>
     <!-- Badge Hostinger -->
-    <div class="hostinger-badge">🚀 Powered by Ghost</div>
+    <div class="hostinger-badge">🚀 Powered by Ghost C.</div>
     
     <!-- Bannière d'alerte (ajoutée dynamiquement) -->
     
@@ -131,7 +131,7 @@
         };
 
         // Constantes améliorées
-        const KM_TO_DEGREES = 1 / 111; // Correction : 1 degré ≈ 111.32 km à l'équateur
+        const KM_TO_DEGREES = 1 / 111.32; // Correction : 1 degré ≈ 111.32 km à l'équateur
         const REFRESH_NORMAL = 10; // 10 secondes en mode normal
         const REFRESH_ALERTE = 2;  // 2 secondes si navires en zone rouge
 
@@ -895,13 +895,12 @@
             coordsActuelles.lat = lat;
             coordsActuelles.lon = lon;
 
-            // Correction du calcul GPS avec la constante améliorée
-            const kmToDegrees = rayon * KM_TO_DEGREES;
+            // Calcul GPS comme avant (fonctionne)
+            const kmToDegrees = rayon / 111;
             const minLat = lat - kmToDegrees;
             const maxLat = lat + kmToDegrees;
-            const cosLat = Math.cos(lat * Math.PI / 180);
-            const minLon = lon - (kmToDegrees / cosLat);
-            const maxLon = lon + (kmToDegrees / cosLat);
+            const minLon = lon - (kmToDegrees / Math.cos(lat * Math.PI / 180));
+            const maxLon = lon + (kmToDegrees / Math.cos(lat * Math.PI / 180));
 
             const params = new URLSearchParams({
                 minLat: minLat.toFixed(6),
