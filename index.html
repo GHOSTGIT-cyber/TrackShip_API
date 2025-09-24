@@ -16,13 +16,14 @@
     
     <!-- Compteur de rafraîchissement -->
     <div id="compteurRefresh" class="compteur-refresh" style="display: none;">
-        Actualisation dans <span id="tempsRestant">10</span>s
+        <div>Actualisation dans <span id="tempsRestant">10</span>s</div>
+        <div id="modeActualisation" style="font-size: 12px; opacity: 0.8;">Mode: Normal</div>
     </div>
 
     <div class="container">
         <div class="header">
             <h1>🛰️ Surveillance des navires en mouvement (Seine)</h1>
-            <p>trackship.bakabi.fr • API EuRIS • surveillance automatique avec alertes de proximité</p>
+            <p>trackship.bakabi.fr • API EuRIS • surveillance automatique avec alertes de proximité • Suivi temps réel zone rouge</p>
         </div>
 
         <div class="controls">
@@ -87,6 +88,10 @@
                         <span class="stat-value" id="naviresAlerte">0</span>
                     </div>
                     <div class="stat-item">
+                        <span class="stat-label">🎯 Trackés en temps réel</span>
+                        <span class="stat-value" id="naviresTrackes">0</span>
+                    </div>
+                    <div class="stat-item">
                         <span class="stat-label">Dernière MAJ</span>
                         <span class="stat-value" id="derniereMaj">Jamais</span>
                     </div>
@@ -96,6 +101,14 @@
                     <h3>🚢 Navires surveillés</h3>
                     <div id="listeNavires" class="loading">
                         Cliquez sur "Démarrer la surveillance" pour commencer...
+                    </div>
+                </div>
+
+                <!-- Nouvelle section pour les navires non conformes -->
+                <div class="navires-list" id="sectionNonConformes" style="display: none;">
+                    <h3>⚠️ Navires non conformes</h3>
+                    <div id="listeNonConformes" class="loading">
+                        Aucun navire non conforme détecté
                     </div>
                 </div>
             </div>
@@ -117,20 +130,110 @@
             APPROCHE: 3000      // 3km - zone d'approche (vert)
         };
 
+        // Constantes améliorées
+        const KM_TO_DEGREES = 1 / 111.32; // Correction : 1 degré ≈ 111.32 km à l'équateur
+        const REFRESH_NORMAL = 10; // 10 secondes en mode normal
+        const REFRESH_ALERTE = 2;  // 2 secondes si navires en zone rouge
+
         // Variables globales
         let map;
         let navires = [];
+        let naviresNonConformes = [];
         let markers = [];
         let cercles = [];
         let baseMarker;
         let surveillanceActive = false;
         let intervalleRefresh;
         let intervalleCompteur;
-        let tempsRestant = 10;
+        let tempsRestant = REFRESH_NORMAL;
         let naviresEnAlerte = new Set();
+        let naviresTrackes = new Map(); // MMSI -> données de tracking
         let coordsActuelles = {...BASE_COORDS};
+        let modeActualisation = 'normal'; // 'normal' ou 'alerte'
 
-        console.log('🚢 TrackShip chargé sur trackship.bakabi.fr');
+        console.log('🚢 TrackShip chargé sur trackship.bakabi.fr - Version améliorée');
+
+        // Fonction pour créer une icône directionnelle
+        function creerIconeDirectionnelle(navire, analyse) {
+            const enMouvement = estEnMouvement(navire);
+            const course = parseFloat(navire.course) || 0;
+            
+            // Couleur selon le statut
+            let couleur = analyse.couleur;
+            let taille = enMouvement ? 24 : 18;
+            let opacite = enMouvement ? 1 : 0.6;
+            
+            // Création de l'icône avec flèche directionnelle
+            let iconeHtml;
+            
+            if (enMouvement && course !== null && course !== undefined) {
+                // Navire en mouvement avec cap connu
+                iconeHtml = `
+                    <div style="
+                        width: ${taille}px;
+                        height: ${taille}px;
+                        position: relative;
+                        transform: rotate(${course}deg);
+                    ">
+                        <div style="
+                            width: 0;
+                            height: 0;
+                            border-left: ${taille/3}px solid transparent;
+                            border-right: ${taille/3}px solid transparent;
+                            border-bottom: ${taille}px solid ${couleur};
+                            position: absolute;
+                            top: 0;
+                            left: 50%;
+                            transform: translateX(-50%);
+                            filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+                        "></div>
+                        <div style="
+                            position: absolute;
+                            bottom: 2px;
+                            left: 50%;
+                            transform: translateX(-50%) rotate(-${course}deg);
+                            font-size: 10px;
+                            color: white;
+                            text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
+                        ">🚢</div>
+                    </div>
+                `;
+                
+                if (analyse.emoji) {
+                    iconeHtml += `<span style="position: absolute; top: -8px; right: -8px; font-size: 14px; z-index: 1000;">${analyse.emoji}</span>`;
+                }
+            } else {
+                // Navire à l'arrêt ou sans cap - icône circulaire classique
+                iconeHtml = `
+                    <div style="
+                        background-color: ${couleur};
+                        width: ${taille}px;
+                        height: ${taille}px;
+                        border-radius: 50%;
+                        border: 2px solid white;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 10px;
+                        opacity: ${opacite};
+                        position: relative;
+                    ">🚢</div>
+                `;
+                
+                if (analyse.emoji) {
+                    iconeHtml += `<span style="position: absolute; top: -8px; right: -8px; font-size: 14px;">${analyse.emoji}</span>`;
+                }
+            }
+
+            return L.divIcon({
+                html: iconeHtml,
+                iconSize: [taille + 4, taille + 4],
+                iconAnchor: [taille/2 + 2, taille/2 + 2],
+                popupAnchor: [0, -(taille/2 + 2)],
+                className: 'navire-marker-directionnel'
+            });
+        }
 
         // Affichage du statut de connexion
         function afficherStatut(type, message) {
@@ -189,7 +292,7 @@
             cercles.forEach(cercle => map.removeLayer(cercle));
             cercles = [];
 
-            // Marqueur de base (avec image personnalisable)
+            // Marqueur de base
             const imageUrl = 'assets/1.png';
             
             const baseIcon = L.icon({
@@ -213,7 +316,7 @@
                 baseMarker.setIcon(fallbackIcon);
             });
 
-            // Calcul des rayons
+            // Calcul des rayons avec correction GPS
             const rayonSaisi = parseFloat(document.getElementById('rayon').value) || 5;
             let rayons = {...ZONES_BASE};
             
@@ -224,17 +327,16 @@
                 rayons.APPROCHE = ZONES_BASE.APPROCHE * facteur;
             }
 
-            // Zone d'alerte (1km) - rouge
+            // Création des cercles
             const cercleAlerte = L.circle([coordsActuelles.lat, coordsActuelles.lon], {
                 color: '#dc3545',
                 fillColor: '#dc3545',
                 fillOpacity: 0.2,
                 radius: rayons.ALERTE,
                 weight: 3
-            }).addTo(map).bindPopup(`Zone d'alerte (${Math.round(rayons.ALERTE/1000*10)/10}km)`);
+            }).addTo(map).bindPopup(`Zone d'alerte (${Math.round(rayons.ALERTE/1000*10)/10}km) - Suivi 2s`);
             cercles.push(cercleAlerte);
 
-            // Zone de vigilance (2km) - orange
             const cercleVigilance = L.circle([coordsActuelles.lat, coordsActuelles.lon], {
                 color: '#fd7e14',
                 fillColor: '#fd7e14',
@@ -244,7 +346,6 @@
             }).addTo(map).bindPopup(`Zone de vigilance (${Math.round(rayons.VIGILANCE/1000*10)/10}km)`);
             cercles.push(cercleVigilance);
 
-            // Zone d'approche (3km) - vert
             const cercleApproche = L.circle([coordsActuelles.lat, coordsActuelles.lon], {
                 color: '#28a745',
                 fillColor: '#28a745',
@@ -255,7 +356,6 @@
             }).addTo(map).bindPopup(`Zone d'approche (${Math.round(rayons.APPROCHE/1000*10)/10}km)`);
             cercles.push(cercleApproche);
 
-            // Zone de surveillance générale si > 3km
             if (rayonSaisi > 3) {
                 const cercleSurveillance = L.circle([coordsActuelles.lat, coordsActuelles.lon], {
                     color: '#6c757d',
@@ -269,9 +369,9 @@
             }
         }
 
-        // Calcul de la distance (formule de Haversine)
+        // Calcul de la distance (formule de Haversine) - Correction GPS appliquée
         function calculerDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371000;
+            const R = 6371000; // Rayon de la Terre en mètres
             const dLat = (lat2 - lat1) * Math.PI / 180;
             const dLon = (lon2 - lon1) * Math.PI / 180;
             const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
@@ -285,6 +385,18 @@
         function estEnMouvement(navire) {
             const vitesse = parseFloat(navire.speed) || 0;
             return vitesse > 0.5;
+        }
+
+        // Vérification si navire conforme aux critères d'affichage
+        function estNavireConforme(navire) {
+            // Critères de conformité (modifiables selon vos besoins)
+            const aVitesse = navire.speed !== null && navire.speed !== undefined;
+            const aNom = navire.shipName && navire.shipName.trim() !== '';
+            const aLongueur = navire.length && parseFloat(navire.length) > 0;
+            const aMMSI = navire.mmsi && navire.mmsi.toString().length >= 6;
+            
+            // Un navire est conforme s'il a au moins un nom et un MMSI valide
+            return aNom && aMMSI;
         }
 
         // Analyse du niveau de danger
@@ -334,6 +446,67 @@
             };
         }
 
+        // Gestion du tracking des navires en zone rouge
+        function gererTrackingZoneRouge() {
+            const naviresAlerteEnMouvement = navires.filter(navire => {
+                const analyse = analyserNavire(navire);
+                return analyse.statut === 'alerte' && estEnMouvement(navire) && navire.mmsi;
+            });
+
+            // Mise à jour de la liste de tracking
+            const anciennesClefs = new Set(naviresTrackes.keys());
+            const nouvellesClefs = new Set();
+
+            naviresAlerteEnMouvement.forEach(navire => {
+                const mmsi = navire.mmsi.toString();
+                nouvellesClefs.add(mmsi);
+                
+                if (!naviresTrackes.has(mmsi)) {
+                    naviresTrackes.set(mmsi, {
+                        navire: navire,
+                        debutTracking: Date.now(),
+                        dernierePosition: {lat: navire.latitude, lon: navire.longitude},
+                        historique: []
+                    });
+                    console.log(`🎯 Début du tracking: ${navire.shipName} (${mmsi})`);
+                } else {
+                    // Mise à jour des données
+                    const tracking = naviresTrackes.get(mmsi);
+                    tracking.navire = navire;
+                    tracking.historique.push({
+                        timestamp: Date.now(),
+                        lat: navire.latitude,
+                        lon: navire.longitude,
+                        speed: navire.speed,
+                        course: navire.course
+                    });
+                    tracking.dernierePosition = {lat: navire.latitude, lon: navire.longitude};
+                }
+            });
+
+            // Suppression des navires qui ne sont plus en zone rouge
+            anciennesClefs.forEach(mmsi => {
+                if (!nouvellesClefs.has(mmsi)) {
+                    const tracking = naviresTrackes.get(mmsi);
+                    console.log(`⏹️ Fin du tracking: ${tracking.navire.shipName} (${mmsi})`);
+                    naviresTrackes.delete(mmsi);
+                }
+            });
+
+            // Déterminer le mode d'actualisation
+            const nouveauMode = naviresTrackes.size > 0 ? 'alerte' : 'normal';
+            if (modeActualisation !== nouveauMode) {
+                modeActualisation = nouveauMode;
+                const nouveauTemps = modeActualisation === 'alerte' ? REFRESH_ALERTE : REFRESH_NORMAL;
+                tempsRestant = nouveauTemps;
+                
+                document.getElementById('modeActualisation').textContent = 
+                    `Mode: ${modeActualisation === 'alerte' ? 'ALERTE (2s)' : 'Normal (10s)'}`;
+                
+                console.log(`🔄 Mode actualisation: ${modeActualisation} (${nouveauTemps}s)`);
+            }
+        }
+
         // Panneau d'attention pour navires en mouvement < 2km
         function afficherPanneauAttention(naviresVigilance) {
             const panneauExistant = document.getElementById('panneauAttention');
@@ -360,6 +533,7 @@
             
             naviresEnMouvementVigilance.forEach(navire => {
                 const analyse = analyserNavire(navire);
+                const cap = navire.course ? `${Math.round(navire.course)}°` : 'N/A';
                 contenuPanneau += `
                     <div class="navire-panneau">
                         <div style="font-size: 16px; margin-bottom: 5px;">
@@ -368,6 +542,7 @@
                         <div style="font-size: 14px; opacity: 0.9;">
                             Distance: <strong>${analyse.distance}m</strong><br>
                             Vitesse: <strong>${navire.speed || 'N/A'} kn</strong><br>
+                            Cap: <strong>${cap}</strong><br>
                             Longueur: <strong>${navire.length || 'N/A'} m</strong>
                         </div>
                     </div>
@@ -394,13 +569,14 @@
             }
 
             const analyse = analyserNavire(navire);
+            const cap = navire.course ? `${Math.round(navire.course)}°` : 'N/A';
             
             const banniere = document.createElement('div');
             banniere.id = 'banniereAlerte';
             banniere.className = 'banniere-alerte';
             banniere.innerHTML = `
                 🚨 ALERTE ZONE 1KM 🚨 - Navire en mouvement "${navire.shipName || 'Inconnu'}" ! 
-                Distance: ${analyse.distance}m - Vitesse: ${navire.speed || 'N/A'} kn
+                Distance: ${analyse.distance}m - Vitesse: ${navire.speed || 'N/A'} kn - Cap: ${cap}
             `;
             
             document.body.insertBefore(banniere, document.body.firstChild);
@@ -458,30 +634,10 @@
                 const analyse = analyserNavire(navire);
                 const enMouvement = estEnMouvement(navire);
                 
-                let iconeHtml = `<div style="
-                    background-color: ${analyse.couleur};
-                    width: 20px;
-                    height: 20px;
-                    border-radius: 50%;
-                    border: 2px solid white;
-                    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-size: 10px;
-                    opacity: ${enMouvement ? '1' : '0.6'};
-                ">🚢</div>`;
+                // Utilisation de l'icône directionnelle améliorée
+                const iconeNavire = creerIconeDirectionnelle(navire, analyse);
 
-                if (analyse.emoji) {
-                    iconeHtml += `<span style="position: absolute; top: -10px; right: -10px; font-size: 16px;">${analyse.emoji}</span>`;
-                }
-
-                const iconeNavire = L.divIcon({
-                    html: iconeHtml,
-                    iconSize: [20, 20],
-                    className: 'navire-marker'
-                });
-
+                const cap = navire.course ? `${Math.round(navire.course)}°` : 'N/A';
                 const popupContent = `
                     <div style="min-width: 200px;">
                         <h4 style="margin: 0 0 10px 0; color: ${analyse.couleur};">
@@ -489,15 +645,17 @@
                         </h4>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 12px;">
                             <div><strong>Vitesse:</strong> ${navire.speed || 'N/A'} kn</div>
+                            <div><strong>Cap:</strong> ${cap}</div>
                             <div><strong>Longueur:</strong> ${navire.length || 'N/A'} m</div>
                             <div><strong>MMSI:</strong> ${navire.mmsi || 'N/A'}</div>
                             <div><strong>Type:</strong> ${navire.shipType || 'N/A'}</div>
                             <div><strong>Distance:</strong> ${analyse.distance}m</div>
-                            <div><strong>Statut:</strong> <span style="color: ${analyse.couleur}; font-weight: bold;">${enMouvement ? 'EN MOUVEMENT' : 'À L\'ARRÊT'}</span></div>
+                            <div style="grid-column: 1 / -1;"><strong>Statut:</strong> <span style="color: ${analyse.couleur}; font-weight: bold;">${enMouvement ? 'EN MOUVEMENT' : 'À L\'ARRÊT'}</span></div>
                         </div>
                         <div style="margin-top: 8px; font-size: 11px; color: #666;">
                             📍 ${navire.latitude?.toFixed(6)}, ${navire.longitude?.toFixed(6)}
                         </div>
+                        ${naviresTrackes.has(navire.mmsi?.toString()) ? '<div style="margin-top: 5px; color: #dc3545; font-weight: bold; font-size: 11px;">🎯 TRACKÉ EN TEMPS RÉEL</div>' : ''}
                     </div>
                 `;
 
@@ -511,7 +669,7 @@
             console.log(`✅ ${markers.length} marqueurs ajoutés`);
         }
 
-        // Mise à jour de la liste des navires
+        // Mise à jour de la liste des navires conformes
         function mettreAJourListeNavires() {
             console.log('📋 Mise à jour de la liste des navires');
             
@@ -540,6 +698,8 @@
             const htmlNavires = naviresTries.map(navire => {
                 const analyse = analyserNavire(navire);
                 const enMouvement = estEnMouvement(navire);
+                const estTracke = naviresTrackes.has(navire.mmsi?.toString());
+                const cap = navire.course ? `${Math.round(navire.course)}°` : 'N/A';
                 
                 return `
                     <div class="navire-item ${analyse.classeCSS}" onclick="centrerSurNavire(${navire.latitude}, ${navire.longitude})">
@@ -547,6 +707,7 @@
                             <span class="navire-nom">
                                 🚢 ${navire.shipName || 'Navire inconnu'} ${analyse.emoji}
                                 ${enMouvement ? '🔄' : '⏸️'}
+                                ${estTracke ? '🎯' : ''}
                             </span>
                             <span class="navire-distance ${analyse.classeDistance}">
                                 ${analyse.distance}m
@@ -556,6 +717,10 @@
                             <div class="navire-detail">
                                 <span>Vitesse:</span>
                                 <strong>${navire.speed || 'N/A'} kn</strong>
+                            </div>
+                            <div class="navire-detail">
+                                <span>Cap:</span>
+                                <strong>${cap}</strong>
                             </div>
                             <div class="navire-detail">
                                 <span>Longueur:</span>
@@ -573,16 +738,73 @@
                                 <span>Statut:</span>
                                 <strong>${enMouvement ? 'En mouvement' : 'À l\'arrêt'}</strong>
                             </div>
-                            <div class="navire-detail">
-                                <span>Distance base:</span>
-                                <strong>${analyse.distance}m</strong>
-                            </div>
                         </div>
+                        ${estTracke ? '<div style="margin-top: 8px; padding: 4px 8px; background: #dc3545; color: white; border-radius: 4px; font-size: 11px; text-align: center;">🎯 SUIVI TEMPS RÉEL</div>' : ''}
                     </div>
                 `;
             }).join('');
 
             listeElement.innerHTML = htmlNavires;
+        }
+
+        // Mise à jour de la liste des navires non conformes
+        function mettreAJourListeNonConformes() {
+            const sectionNonConformes = document.getElementById('sectionNonConformes');
+            const listeElement = document.getElementById('listeNonConformes');
+            
+            if (naviresNonConformes.length === 0) {
+                sectionNonConformes.style.display = 'none';
+                return;
+            }
+
+            sectionNonConformes.style.display = 'block';
+            
+            const htmlNonConformes = naviresNonConformes.map(navire => {
+                const analyse = analyserNavire(navire);
+                const enMouvement = estEnMouvement(navire);
+                
+                let raisonNonConforme = [];
+                if (!navire.shipName || navire.shipName.trim() === '') raisonNonConforme.push('Nom manquant');
+                if (!navire.mmsi || navire.mmsi.toString().length < 6) raisonNonConforme.push('MMSI invalide');
+                if (!navire.length || parseFloat(navire.length) <= 0) raisonNonConforme.push('Longueur manquante');
+                if (!navire.speed && navire.speed !== 0) raisonNonConforme.push('Vitesse manquante');
+                
+                return `
+                    <div class="navire-item navire-non-conforme" onclick="centrerSurNavire(${navire.latitude}, ${navire.longitude})">
+                        <div class="navire-header">
+                            <span class="navire-nom">
+                                ⚠️ ${navire.shipName || 'Inconnu'} ${enMouvement ? '🔄' : '⏸️'}
+                            </span>
+                            <span class="navire-distance distance-vigilance">
+                                ${analyse.distance}m
+                            </span>
+                        </div>
+                        <div class="navire-details">
+                            <div class="navire-detail">
+                                <span>Vitesse:</span>
+                                <strong>${navire.speed || 'N/A'} kn</strong>
+                            </div>
+                            <div class="navire-detail">
+                                <span>MMSI:</span>
+                                <strong>${navire.mmsi || 'N/A'}</strong>
+                            </div>
+                            <div class="navire-detail">
+                                <span>Longueur:</span>
+                                <strong>${navire.length || 'N/A'} m</strong>
+                            </div>
+                            <div class="navire-detail">
+                                <span>Type:</span>
+                                <strong>${navire.shipType || 'N/A'}</strong>
+                            </div>
+                        </div>
+                        <div style="margin-top: 8px; padding: 4px 8px; background: #ffc107; color: #000; border-radius: 4px; font-size: 11px;">
+                            Problème(s): ${raisonNonConforme.join(', ')}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            listeElement.innerHTML = htmlNonConformes;
         }
 
         // Centrage sur navire
@@ -609,6 +831,7 @@
             document.getElementById('naviresApproche').textContent = approche;
             document.getElementById('naviresVigilance').textContent = vigilance;
             document.getElementById('naviresAlerte').textContent = alerte;
+            document.getElementById('naviresTrackes').textContent = naviresTrackes.size;
             document.getElementById('derniereMaj').textContent = new Date().toLocaleTimeString('fr-FR');
         }
 
@@ -652,9 +875,9 @@
             });
         }
 
-        // *** MODIFICATION PRINCIPALE : URL API CHANGÉE ***
-        async function recupererNavires() {
-            console.log('🔄 Récupération des navires depuis EuRIS...');
+        // Récupération optimisée des navires
+        async function recupererNavires(modeCible = false) {
+            console.log('🔄 Récupération des navires depuis EuRIS...', modeCible ? '(Mode ciblé)' : '');
             
             const token = document.getElementById('token').value;
             const lat = parseFloat(document.getElementById('latitude').value);
@@ -672,24 +895,31 @@
             coordsActuelles.lat = lat;
             coordsActuelles.lon = lon;
 
-            const kmToDegrees = rayon / 111;
+            // Correction du calcul GPS avec la constante améliorée
+            const kmToDegrees = rayon * KM_TO_DEGREES;
             const minLat = lat - kmToDegrees;
             const maxLat = lat + kmToDegrees;
-            const minLon = lon - (kmToDegrees / Math.cos(lat * Math.PI / 180));
-            const maxLon = lon + (kmToDegrees / Math.cos(lat * Math.PI / 180));
+            const cosLat = Math.cos(lat * Math.PI / 180);
+            const minLon = lon - (kmToDegrees / cosLat);
+            const maxLon = lon + (kmToDegrees / cosLat);
 
             const params = new URLSearchParams({
-                minLat: minLat.toString(),
-                maxLat: maxLat.toString(),
-                minLon: minLon.toString(),
-                maxLon: maxLon.toString(),
-                pageSize: '100'
+                minLat: minLat.toFixed(6),
+                maxLat: maxLat.toFixed(6),
+                minLon: minLon.toFixed(6),
+                maxLon: maxLon.toFixed(6),
+                pageSize: modeCible && naviresTrackes.size > 0 ? '20' : '100'
             });
 
-            // *** URL MODIFIÉE POUR HOSTINGER ***
+            // Si on a des navires trackés et qu'on est en mode alerte, on peut ajouter un filtre MMSI
+            if (modeCible && naviresTrackes.size > 0 && naviresTrackes.size <= 10) {
+                // Optionnel: ajouter les MMSI trackés pour une requête plus ciblée
+                // params.append('mmsi', Array.from(naviresTrackes.keys()).join(','));
+            }
+
             const url = `api/euris-proxy.php?${params.toString()}`;
             
-            console.log('🌐 URL appelée:', url);
+            console.log('🌐 URL appelée:', url, modeCible ? '(Requête optimisée)' : '');
             
             const response = await fetch(url, {
                 method: 'GET',
@@ -763,21 +993,38 @@
                 console.log('🔄 Début de la mise à jour des données');
                 afficherStatut('connecting', 'Connexion à l\'API EuRIS...');
                 
-                navires = await recupererNavires();
+                // Utiliser le mode ciblé si on est en mode alerte
+                const modeCible = modeActualisation === 'alerte';
+                const tousLesNavires = await recupererNavires(modeCible);
                 
-                console.log(`📊 ${navires.length} navires récupérés`);
+                // Séparation des navires conformes et non conformes
+                navires = tousLesNavires.filter(estNavireConforme);
+                naviresNonConformes = tousLesNavires.filter(navire => !estNavireConforme(navire) && estEnMouvement(navire));
+                
+                console.log(`📊 ${navires.length} navires conformes, ${naviresNonConformes.length} non conformes en mouvement`);
                 
                 mettreAJourBase();
                 map.setView([coordsActuelles.lat, coordsActuelles.lon], map.getZoom());
                 
+                gererTrackingZoneRouge();
+                
                 mettreAJourMarqueurs();
                 mettreAJourListeNavires();
+                mettreAJourListeNonConformes();
                 mettreAJourStatistiques();
                 gererAlertes();
                 
                 const naviresAfficher = filtrerNavires(navires);
-                if (naviresAfficher.length > 0) {
-                    afficherStatut('connected', `${naviresAfficher.length} navires surveillés`);
+                let statusMessage = `${naviresAfficher.length} navires surveillés`;
+                if (naviresTrackes.size > 0) {
+                    statusMessage += ` (${naviresTrackes.size} trackés)`;
+                }
+                if (naviresNonConformes.length > 0) {
+                    statusMessage += ` - ${naviresNonConformes.length} non conformes`;
+                }
+                
+                if (naviresAfficher.length > 0 || naviresNonConformes.length > 0) {
+                    afficherStatut('connected', statusMessage);
                 } else {
                     afficherStatut('connected', 'Aucun navire dans la zone');
                     afficherMessage('info', 'Zone claire', 'Aucun navire détecté dans la zone de surveillance.');
@@ -836,7 +1083,8 @@
                 tempsRestant--;
                 
                 if (tempsRestant < 0) {
-                    tempsRestant = 10;
+                    const delaiActuel = modeActualisation === 'alerte' ? REFRESH_ALERTE : REFRESH_NORMAL;
+                    tempsRestant = delaiActuel;
                     mettreAJourDonnees();
                 }
             }, 1000);
@@ -862,8 +1110,11 @@
             btn.disabled = false;
             
             document.getElementById('statusIndicator').style.display = 'none';
+            document.getElementById('sectionNonConformes').style.display = 'none';
             
             naviresEnAlerte.clear();
+            naviresTrackes.clear();
+            modeActualisation = 'normal';
             
             const banniere = document.getElementById('banniereAlerte');
             if (banniere) banniere.remove();
@@ -900,8 +1151,8 @@
                 return;
             }
             
-            if (rayon < 3) {
-                alert('Le rayon minimum est de 3 km');
+            if (rayon < 1) {
+                alert('Le rayon minimum est de 1 km');
                 return;
             }
             
@@ -914,10 +1165,10 @@
                 surveillanceActive = true;
                 btn.disabled = false;
                 
-                tempsRestant = 10;
+                tempsRestant = modeActualisation === 'alerte' ? REFRESH_ALERTE : REFRESH_NORMAL;
                 demarrerCompteur();
                 
-                console.log('✅ Surveillance démarrée - Actualisation toutes les 10 secondes');
+                console.log(`✅ Surveillance démarrée - Mode: ${modeActualisation} - Délai: ${tempsRestant + 1}s`);
                 
             } catch (error) {
                 console.error('❌ Erreur lors du démarrage:', error);
@@ -938,7 +1189,7 @@
 
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🌟 Initialisation de l\'application TrackShip');
+            console.log('🌟 Initialisation de l\'application TrackShip - Version améliorée');
             initMap();
             
             window.addEventListener('beforeunload', function() {
@@ -948,6 +1199,7 @@
             });
             
             console.log('✅ Application initialisée et prête sur trackship.bakabi.fr');
+            console.log('🎯 Nouvelles fonctionnalités: Icônes directionnelles, Suivi temps réel zone rouge, Navires non conformes');
         });
     </script>
 </body>

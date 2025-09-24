@@ -449,4 +449,242 @@
             }
         }
 
-   
+
+
+    /* Styles pour les marqueurs directionnels */
+        .navire-marker-directionnel {
+            background: none !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+
+        /* Styles pour les navires non conformes */
+        .navire-non-conforme {
+            border-left: 4px solid #ffc107 !important;
+            background-color: #fffbf0 !important;
+        }
+
+        .navire-non-conforme:hover {
+            background-color: #fff8e1 !important;
+        }
+
+        /* Amélioration du compteur de rafraîchissement */
+        .compteur-refresh {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.85);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 25px;
+            font-weight: bold;
+            font-size: 16px;
+            z-index: 9999;
+            box-shadow: 0 6px 20px rgba(0,0,0,0.4);
+            border: 2px solid #4CAF50;
+            backdrop-filter: blur(10px);
+            min-width: 200px;
+            text-align: center;
+        }
+
+        .compteur-refresh.mode-alerte {
+            border-color: #dc3545;
+            animation: pulse-alerte-compteur 2s infinite;
+        }
+
+        @keyframes pulse-alerte-compteur {
+            0%, 100% { box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4); }
+            50% { box-shadow: 0 6px 30px rgba(220, 53, 69, 0.7); }
+        }
+
+        /* Amélioration des icônes directionnelles */
+        .navire-marker-directionnel .leaflet-div-icon {
+            background: transparent !important;
+            border: none !important;
+        }
+
+        /* Section navires non conformes */
+        .navires-list:last-child {
+            margin-top: 20px;
+        }
+
+        .navires-list:last-child h3 {
+            background: linear-gradient(135deg, #ffc107 0%, #ff8f00 100%);
+            color: #000;
+        }
+
+        /* Styles pour les navires trackés */
+        .navire-item.navire-tracked {
+            position: relative;
+            overflow: hidden;
+        }
+
+        .navire-item.navire-tracked::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(45deg, 
+                transparent 40%, 
+                rgba(220, 53, 69, 0.1) 50%, 
+                transparent 60%);
+            animation: tracking-sweep 3s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes tracking-sweep {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        /* Badge de tracking en temps réel */
+        .badge-tracking {
+            display: inline-block;
+            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            color: white;
+            padding: 2px 8px;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-left: 8px;
+            box-shadow: 0 2px 4px rgba(220, 53, 69, 0.3);
+            animation: badge-pulse 2s infinite;
+        }
+
+        @keyframes badge-pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.8; transform: scale(1.05); }
+        }
+
+        /* Amélioration des popups de carte */
+        .leaflet-popup-content {
+            margin: 12px 16px !important;
+            line-height: 1.4 !important;
+        }
+
+        .leaflet-popup-content h4 {
+            border-bottom: 2px solid #eee;
+            padding-bottom: 8px;
+            margin-bottom: 12px !important;
+        }
+
+        /* Indicateurs de statut améliorés */
+        .status-indicator {
+            padding: 12px 25px;
+            border-radius: 25px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+            border: 2px solid;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .status-connecting {
+            background: linear-gradient(135deg, rgba(255, 243, 205, 0.9), rgba(255, 234, 167, 0.9));
+            color: #856404;
+            border-color: #ffeaa7;
+        }
+
+        .status-connected {
+            background: linear-gradient(135deg, rgba(212, 237, 218, 0.9), rgba(195, 230, 203, 0.9));
+            color: #155724;
+            border-color: #c3e6cb;
+        }
+
+        .status-error {
+            background: linear-gradient(135deg, rgba(248, 215, 218, 0.9), rgba(245, 198, 203, 0.9));
+            color: #721c24;
+            border-color: #f5c6cb;
+        }
+
+        /* Animation pour les navires en alerte */
+        .navire-alerte {
+            animation: alerte-glow 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes alerte-glow {
+            from { box-shadow: 0 0 5px rgba(220, 53, 69, 0.3); }
+            to { box-shadow: 0 0 15px rgba(220, 53, 69, 0.6); }
+        }
+
+        /* Style pour les flèches directionnelles sur la carte */
+        .navire-fleche {
+            transition: transform 0.3s ease;
+        }
+
+        .navire-fleche:hover {
+            transform: scale(1.2);
+        }
+
+        /* Amélioration responsive */
+        @media (max-width: 768px) {
+            .compteur-refresh {
+                top: 10px;
+                right: 10px;
+                padding: 10px 15px;
+                font-size: 14px;
+                min-width: 150px;
+            }
+            
+            .panneau-attention {
+                top: 60px;
+                left: 10px;
+                max-width: calc(100vw - 20px);
+                font-size: 16px;
+            }
+            
+            .navire-marker-directionnel {
+                transform: scale(0.8);
+            }
+        }
+
+        /* Animation de chargement pour les sections */
+        .loading-shimmer {
+            background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.5s infinite;
+        }
+
+        @keyframes shimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+
+        /* Styles pour les coordonnées GPS améliorées */
+        .gps-coordinates {
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.1);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 10px;
+        }
+
+        /* Badge de cap pour les navires */
+        .cap-badge {
+            display: inline-block;
+            background: rgba(0, 123, 255, 0.8);
+            color: white;
+            padding: 1px 6px;
+            border-radius: 10px;
+            font-size: 9px;
+            font-weight: bold;
+            margin-left: 4px;
+        }
+
+        /* Amélioration des alertes de bannière */
+        .banniere-alerte {
+            background: linear-gradient(45deg, #dc3545, #c82333, #dc3545);
+            background-size: 400% 400%;
+            animation: gradient-flow 2s ease infinite, pulse-alert 1s infinite;
+        }
+
+        @keyframes gradient-flow {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        
