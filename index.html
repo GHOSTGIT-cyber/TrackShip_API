@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🛰️ Surveillance des navires - Base EFoil</title>
+    <title>🛰️ Surveillance des navires - Seine</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <link rel="stylesheet" href="assets/style.css" />
     
 </head>
 <body>
     <!-- Badge Hostinger -->
-    <div class="hostinger-badge">🚀 Powered by Ghost C.</div>
+    <div class="hostinger-badge">🚀 Powered by Ghost</div>
     
     <!-- Bannière d'alerte (ajoutée dynamiquement) -->
     
@@ -131,7 +131,6 @@
         };
 
         // Constantes améliorées
-        const KM_TO_DEGREES = 1 / 111.32; // Correction : 1 degré ≈ 111.32 km à l'équateur
         const REFRESH_NORMAL = 10; // 10 secondes en mode normal
         const REFRESH_ALERTE = 2;  // 2 secondes si navires en zone rouge
 
@@ -996,9 +995,14 @@
                 const modeCible = modeActualisation === 'alerte';
                 const tousLesNavires = await recupererNavires(modeCible);
                 
-                // Séparation des navires conformes et non conformes
-                navires = tousLesNavires.filter(estNavireConforme);
-                naviresNonConformes = tousLesNavires.filter(navire => !estNavireConforme(navire) && estEnMouvement(navire));
+                // Tous les navires sont affichés (comme avant)
+                navires = tousLesNavires;
+                
+                // Optionnel : identifier les navires avec des données manquantes
+                naviresNonConformes = tousLesNavires.filter(navire => {
+                    const manqueDonnees = !navire.shipName || !navire.mmsi || !navire.length;
+                    return manqueDonnees && estEnMouvement(navire);
+                });
                 
                 console.log(`📊 ${navires.length} navires conformes, ${naviresNonConformes.length} non conformes en mouvement`);
                 
