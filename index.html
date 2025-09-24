@@ -320,18 +320,6 @@
             color: #495057;
         }
 
-        /* Icônes d'alerte */
-        .emoji-danger {
-            font-size: 1.5em;
-            animation: bounce 1s infinite;
-        }
-
-        @keyframes bounce {
-            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-            40% { transform: translateY(-10px); }
-            60% { transform: translateY(-5px); }
-        }
-
         .loading {
             text-align: center;
             padding: 40px;
@@ -433,6 +421,20 @@
             border: 1px solid #f5c6cb;
         }
 
+        /* Badge Hostinger */
+        .hostinger-badge {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(90deg, #673AB7, #9C27B0);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: bold;
+            z-index: 1000;
+        }
+
         /* Responsive */
         @media (max-width: 768px) {
             .content {
@@ -456,7 +458,10 @@
     </style>
 </head>
 <body>
-    <!-- Bannière d'alerte (sera ajoutée dynamiquement) -->
+    <!-- Badge Hostinger -->
+    <div class="hostinger-badge">🚀 Powered by Hostinger</div>
+    
+    <!-- Bannière d'alerte (ajoutée dynamiquement) -->
     
     <!-- Compteur de rafraîchissement -->
     <div id="compteurRefresh" class="compteur-refresh" style="display: none;">
@@ -466,7 +471,7 @@
     <div class="container">
         <div class="header">
             <h1>🛰️ Surveillance des navires en mouvement (Seine)</h1>
-            <p>API EuRIS : surveillance automatique avec alertes de proximité</p>
+            <p>trackship.bakabi.fr • API EuRIS • surveillance automatique avec alertes de proximité</p>
         </div>
 
         <div class="controls">
@@ -554,7 +559,7 @@
             lon: 2.225328
         };
 
-        // Zones de surveillance (en mètres) - Réglage de base
+        // Zones de surveillance (en mètres)
         const ZONES_BASE = {
             ALERTE: 1000,       // 1km - zone d'alerte (rouge)
             VIGILANCE: 2000,    // 2km - zone de vigilance (orange)
@@ -571,8 +576,10 @@
         let intervalleRefresh;
         let intervalleCompteur;
         let tempsRestant = 10;
-        let naviresEnAlerte = new Set(); // Pour éviter les notifications répétées
+        let naviresEnAlerte = new Set();
         let coordsActuelles = {...BASE_COORDS};
+
+        console.log('🚢 TrackShip chargé sur trackship.bakabi.fr');
 
         // Affichage du statut de connexion
         function afficherStatut(type, message) {
@@ -614,43 +621,33 @@
             
             map = L.map('map').setView([coordsActuelles.lat, coordsActuelles.lon], 12);
             
-            // Couche de carte OpenStreetMap
             L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenStreetMap contributors'
             }).addTo(map);
 
-            // Ajout de la base et des cercles
             mettreAJourBase();
-
             console.log('✅ Carte initialisée avec les zones de surveillance');
         }
 
         // Mise à jour de la base et des cercles
         function mettreAJourBase() {
-            // Suppression de l'ancien marqueur de base
             if (baseMarker) {
                 map.removeLayer(baseMarker);
             }
             
-            // Suppression des anciens cercles
             cercles.forEach(cercle => map.removeLayer(cercle));
             cercles = [];
 
-            // COMMENTAIRE : Chemin vers votre image PNG dans le dossier assets
-            // Coordonnées de la base : latitude = 48.853229, longitude = 2.225328
-            // Taille recommandée pour l'image : 32x32 pixels ou 64x64 pixels maximum
-            // Format PNG recommandé pour la transparence
-            const imageUrl = './assets/1.png'; // Remplacez "votre-image.png" par le nom exact de votre fichier
+            // Marqueur de base (avec image personnalisable)
+            const imageUrl = 'assets/1.png';
             
-            // Création du marqueur de base avec image personnalisée
             const baseIcon = L.icon({
                 iconUrl: imageUrl,
-                iconSize: [32, 32],     // Taille de l'icône en pixels
-                iconAnchor: [16, 16],   // Point d'ancrage de l'icône (centre)
-                popupAnchor: [0, -16]   // Point d'ancrage du popup
+                iconSize: [32, 32],
+                iconAnchor: [16, 16],
+                popupAnchor: [0, -16]
             });
             
-            // Si l'image ne charge pas, utiliser un marqueur par défaut
             const fallbackIcon = L.divIcon({
                 html: '🏭',
                 iconSize: [30, 30],
@@ -659,18 +656,16 @@
             
             baseMarker = L.marker([coordsActuelles.lat, coordsActuelles.lon], {icon: baseIcon})
                 .addTo(map)
-                .bindPopup('<b>🏭 Base de surveillance</b><br>Point central de monitoring');
+                .bindPopup('<b>🏭 Base de surveillance</b><br>trackship.bakabi.fr');
             
-            // Fallback en cas d'erreur de chargement d'image
             baseMarker.on('error', function() {
                 baseMarker.setIcon(fallbackIcon);
             });
 
-            // Calcul des rayons selon la configuration
+            // Calcul des rayons
             const rayonSaisi = parseFloat(document.getElementById('rayon').value) || 5;
             let rayons = {...ZONES_BASE};
             
-            // Si le rayon saisi est supérieur à 3km, ajuster proportionnellement
             if (rayonSaisi > 3) {
                 const facteur = rayonSaisi / 3;
                 rayons.ALERTE = ZONES_BASE.ALERTE * facteur;
@@ -678,7 +673,7 @@
                 rayons.APPROCHE = ZONES_BASE.APPROCHE * facteur;
             }
 
-            // Zone d'alerte (1km ou proportionnelle) - rouge transparent
+            // Zone d'alerte (1km) - rouge
             const cercleAlerte = L.circle([coordsActuelles.lat, coordsActuelles.lon], {
                 color: '#dc3545',
                 fillColor: '#dc3545',
@@ -688,7 +683,7 @@
             }).addTo(map).bindPopup(`Zone d'alerte (${Math.round(rayons.ALERTE/1000*10)/10}km)`);
             cercles.push(cercleAlerte);
 
-            // Zone de vigilance (2km ou proportionnelle) - orange transparent
+            // Zone de vigilance (2km) - orange
             const cercleVigilance = L.circle([coordsActuelles.lat, coordsActuelles.lon], {
                 color: '#fd7e14',
                 fillColor: '#fd7e14',
@@ -698,7 +693,7 @@
             }).addTo(map).bindPopup(`Zone de vigilance (${Math.round(rayons.VIGILANCE/1000*10)/10}km)`);
             cercles.push(cercleVigilance);
 
-            // Zone d'approche (3km ou proportionnelle) - vert transparent
+            // Zone d'approche (3km) - vert
             const cercleApproche = L.circle([coordsActuelles.lat, coordsActuelles.lon], {
                 color: '#28a745',
                 fillColor: '#28a745',
@@ -709,7 +704,7 @@
             }).addTo(map).bindPopup(`Zone d'approche (${Math.round(rayons.APPROCHE/1000*10)/10}km)`);
             cercles.push(cercleApproche);
 
-            // Zone de surveillance générale (rayon saisi)
+            // Zone de surveillance générale si > 3km
             if (rayonSaisi > 3) {
                 const cercleSurveillance = L.circle([coordsActuelles.lat, coordsActuelles.lon], {
                     color: '#6c757d',
@@ -723,25 +718,25 @@
             }
         }
 
-        // Calcul de la distance entre deux points géographiques (formule de Haversine)
+        // Calcul de la distance (formule de Haversine)
         function calculerDistance(lat1, lon1, lat2, lon2) {
-            const R = 6371000; // Rayon de la Terre en mètres
+            const R = 6371000;
             const dLat = (lat2 - lat1) * Math.PI / 180;
             const dLon = (lon2 - lon1) * Math.PI / 180;
             const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
                       Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
                       Math.sin(dLon/2) * Math.sin(dLon/2);
             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-            return R * c; // Distance en mètres
+            return R * c;
         }
 
-        // Vérification si un navire est en mouvement
+        // Vérification si navire en mouvement
         function estEnMouvement(navire) {
             const vitesse = parseFloat(navire.speed) || 0;
-            return vitesse > 0.5; // Considéré en mouvement si vitesse > 0.5 nœuds
+            return vitesse > 0.5;
         }
 
-        // Analyse du niveau de danger d'un navire selon sa distance
+        // Analyse du niveau de danger
         function analyserNavire(navire) {
             const distance = calculerDistance(
                 coordsActuelles.lat, coordsActuelles.lon,
@@ -751,7 +746,6 @@
             const rayonSaisi = parseFloat(document.getElementById('rayon').value) || 5;
             let rayons = {...ZONES_BASE};
             
-            // Ajustement proportionnel si le rayon > 3km
             if (rayonSaisi > 3) {
                 const facteur = rayonSaisi / 3;
                 rayons.ALERTE = ZONES_BASE.ALERTE * facteur;
@@ -760,32 +754,23 @@
             }
 
             let statut = 'approche';
-            let couleur = '#28a745'; // Vert par défaut
+            let couleur = '#28a745';
             let emoji = '';
             let classeCSS = 'navire-normal';
             let classeDistance = 'distance-normal';
 
-            // Détermination du statut selon la distance
             if (distance <= rayons.ALERTE) {
                 statut = 'alerte';
-                couleur = '#dc3545'; // Rouge
+                couleur = '#dc3545';
                 emoji = '🚨';
                 classeCSS = 'navire-alerte';
                 classeDistance = 'distance-alerte';
-                
             } else if (distance <= rayons.VIGILANCE) {
                 statut = 'vigilance';
-                couleur = '#fd7e14'; // Orange
+                couleur = '#fd7e14';
                 emoji = '⚠️';
                 classeCSS = 'navire-vigilance';
                 classeDistance = 'distance-vigilance';
-                
-            } else if (distance <= rayons.APPROCHE) {
-                statut = 'approche';
-                couleur = '#28a745'; // Vert
-                emoji = '';
-                classeCSS = 'navire-normal';
-                classeDistance = 'distance-normal';
             }
 
             return {
@@ -794,25 +779,22 @@
                 couleur,
                 emoji,
                 classeCSS,
-                classeDistance,
-                rayons
+                classeDistance
             };
         }
 
-        // Affichage du panneau d'attention pour les navires EN MOUVEMENT à moins de 2km
+        // Panneau d'attention pour navires en mouvement < 2km
         function afficherPanneauAttention(naviresVigilance) {
-            // Suppression de l'ancien panneau
             const panneauExistant = document.getElementById('panneauAttention');
             if (panneauExistant) {
                 panneauExistant.remove();
             }
 
-            // Filtrer seulement les navires EN MOUVEMENT dans la zone de vigilance (2km)
             const naviresEnMouvementVigilance = naviresVigilance.filter(navire => estEnMouvement(navire));
 
             if (naviresEnMouvementVigilance.length === 0) return;
 
-            console.log('⚠️ Affichage panneau attention pour', naviresEnMouvementVigilance.length, 'navire(s) en mouvement');
+            console.log('⚠️ Panneau attention pour', naviresEnMouvementVigilance.length, 'navire(s) en mouvement');
             
             const panneau = document.createElement('div');
             panneau.id = 'panneauAttention';
@@ -844,7 +826,6 @@
             panneau.innerHTML = contenuPanneau;
             document.body.appendChild(panneau);
             
-            // Suppression automatique après 8 secondes
             setTimeout(() => {
                 if (document.getElementById('panneauAttention')) {
                     panneau.remove();
@@ -852,11 +833,10 @@
             }, 8000);
         }
 
-        // Déclenchement de l'alerte pour les navires en mouvement dans la zone de 1km
+        // Alerte rouge pour navires en mouvement < 1km
         function declencherAlerteRouge(navire) {
-            console.log('🚨 Déclenchement alerte rouge pour navire en mouvement:', navire.shipName);
+            console.log('🚨 Alerte rouge pour navire en mouvement:', navire.shipName);
             
-            // Suppression de l'ancienne bannière si elle existe
             const ancienneBanniere = document.getElementById('banniereAlerte');
             if (ancienneBanniere) {
                 ancienneBanniere.remove();
@@ -864,7 +844,6 @@
 
             const analyse = analyserNavire(navire);
             
-            // Création de la bannière d'alerte rouge
             const banniere = document.createElement('div');
             banniere.id = 'banniereAlerte';
             banniere.className = 'banniere-alerte';
@@ -875,14 +854,13 @@
             
             document.body.insertBefore(banniere, document.body.firstChild);
             
-            // Suppression automatique après 10 secondes
             setTimeout(() => {
                 if (document.getElementById('banniereAlerte')) {
                     banniere.remove();
                 }
             }, 10000);
 
-            // Notification sonore (si le navigateur le permet)
+            // Notification sonore
             try {
                 const audioContext = new (window.AudioContext || window.webkitAudioContext)();
                 const oscillator = audioContext.createOscillator();
@@ -901,7 +879,7 @@
             }
         }
 
-        // Filtrage des navires selon le type sélectionné
+        // Filtrage des navires
         function filtrerNavires(navires) {
             const filtre = document.getElementById('filtreNavires').value;
             
@@ -918,21 +896,17 @@
 
         // Mise à jour des marqueurs sur la carte
         function mettreAJourMarqueurs() {
-            console.log('🗺️ Mise à jour des marqueurs sur la carte');
+            console.log('🗺️ Mise à jour des marqueurs');
             
-            // Suppression des anciens marqueurs
             markers.forEach(marker => map.removeLayer(marker));
             markers = [];
 
-            // Filtrage des navires
             const naviresAfficher = filtrerNavires(navires);
 
-            // Ajout des nouveaux marqueurs pour chaque navire
             naviresAfficher.forEach(navire => {
                 const analyse = analyserNavire(navire);
                 const enMouvement = estEnMouvement(navire);
                 
-                // Création de l'icône du navire avec couleur selon la distance
                 let iconeHtml = `<div style="
                     background-color: ${analyse.couleur};
                     width: 20px;
@@ -957,7 +931,6 @@
                     className: 'navire-marker'
                 });
 
-                // Création du popup avec informations détaillées
                 const popupContent = `
                     <div style="min-width: 200px;">
                         <h4 style="margin: 0 0 10px 0; color: ${analyse.couleur};">
@@ -977,7 +950,6 @@
                     </div>
                 `;
 
-                // Ajout du marqueur à la carte
                 const marker = L.marker([navire.latitude, navire.longitude], {icon: iconeNavire})
                     .addTo(map)
                     .bindPopup(popupContent);
@@ -985,16 +957,14 @@
                 markers.push(marker);
             });
 
-            console.log(`✅ ${markers.length} marqueurs ajoutés à la carte`);
+            console.log(`✅ ${markers.length} marqueurs ajoutés`);
         }
 
-        // Mise à jour de la liste des navires dans la sidebar
+        // Mise à jour de la liste des navires
         function mettreAJourListeNavires() {
             console.log('📋 Mise à jour de la liste des navires');
             
             const listeElement = document.getElementById('listeNavires');
-            
-            // Filtrage des navires
             const naviresAfficher = filtrerNavires(navires);
             
             if (naviresAfficher.length === 0) {
@@ -1009,14 +979,13 @@
                 return;
             }
 
-            // Tri des navires par distance (les plus proches en premier)
+            // Tri par distance
             const naviresTries = [...naviresAfficher].sort((a, b) => {
                 const distA = calculerDistance(coordsActuelles.lat, coordsActuelles.lon, a.latitude, a.longitude);
                 const distB = calculerDistance(coordsActuelles.lat, coordsActuelles.lon, b.latitude, b.longitude);
                 return distA - distB;
             });
 
-            // Génération du HTML pour chaque navire
             const htmlNavires = naviresTries.map(navire => {
                 const analyse = analyserNavire(navire);
                 const enMouvement = estEnMouvement(navire);
@@ -1065,7 +1034,7 @@
             listeElement.innerHTML = htmlNavires;
         }
 
-        // Centrage de la carte sur un navire spécifique
+        // Centrage sur navire
         function centrerSurNavire(lat, lon) {
             console.log(`🎯 Centrage sur navire: ${lat}, ${lon}`);
             map.setView([lat, lon], 15);
@@ -1073,8 +1042,6 @@
 
         // Mise à jour des statistiques
         function mettreAJourStatistiques() {
-            console.log('📊 Mise à jour des statistiques');
-            
             const naviresAfficher = filtrerNavires(navires);
             let approche = 0, vigilance = 0, alerte = 0;
             
@@ -1087,7 +1054,6 @@
                 }
             });
 
-            // Mise à jour des éléments HTML
             document.getElementById('totalNavires').textContent = naviresAfficher.length;
             document.getElementById('naviresApproche').textContent = approche;
             document.getElementById('naviresVigilance').textContent = vigilance;
@@ -1095,33 +1061,29 @@
             document.getElementById('derniereMaj').textContent = new Date().toLocaleTimeString('fr-FR');
         }
 
-        // Gestion des alertes selon les nouvelles règles
+        // Gestion des alertes
         function gererAlertes() {
             const naviresAfficher = filtrerNavires(navires);
             
-            // Navires en alerte (zone rouge 1km)
             const naviresZoneAlerte = naviresAfficher.filter(navire => {
                 const analyse = analyserNavire(navire);
                 return analyse.statut === 'alerte';
             });
             
-            // Navires en vigilance (zone orange 2km)
             const naviresZoneVigilance = naviresAfficher.filter(navire => {
                 const analyse = analyserNavire(navire);
-                return analyse.statut === 'vigilance' || analyse.statut === 'alerte'; // Inclut aussi les navires en zone rouge
+                return analyse.statut === 'vigilance' || analyse.statut === 'alerte';
             });
             
-            // Navires en mouvement dans la zone d'alerte (pour bannière rouge)
             const naviresAlerteMouvement = naviresZoneAlerte.filter(navire => estEnMouvement(navire));
             
-            // 🟠 PANNEAU ORANGE : Affichage des navires EN MOUVEMENT dans la zone de 2km
+            // Panneau orange : navires EN MOUVEMENT dans zone 2km
             if (naviresZoneVigilance.length > 0) {
                 afficherPanneauAttention(naviresZoneVigilance);
             }
             
-            // 🔴 BANNIÈRE ROUGE : Déclenchement seulement pour les navires en mouvement dans la zone de 1km
+            // Bannière rouge : navires EN MOUVEMENT dans zone 1km
             if (naviresAlerteMouvement.length > 0) {
-                // Vérifier les nouveaux navires en alerte
                 naviresAlerteMouvement.forEach(navire => {
                     if (!naviresEnAlerte.has(navire.mmsi)) {
                         declencherAlerteRouge(navire);
@@ -1130,7 +1092,7 @@
                 });
             }
             
-            // Nettoyage des navires qui ne sont plus en alerte
+            // Nettoyage des navires plus en alerte
             const mmsiActuels = new Set(naviresAlerteMouvement.map(n => n.mmsi));
             naviresEnAlerte.forEach(mmsi => {
                 if (!mmsiActuels.has(mmsi)) {
@@ -1139,7 +1101,7 @@
             });
         }
 
-        // Récupération des données depuis l'API EuRIS via le proxy
+        // *** MODIFICATION PRINCIPALE : URL API CHANGÉE ***
         async function recupererNavires() {
             console.log('🔄 Récupération des navires depuis EuRIS...');
             
@@ -1152,23 +1114,19 @@
                 throw new Error('Token API requis');
             }
 
-            // Validation des coordonnées
             if (isNaN(lat) || isNaN(lon) || isNaN(rayon)) {
                 throw new Error('Coordonnées invalides');
             }
 
-            // Mise à jour des coordonnées actuelles
             coordsActuelles.lat = lat;
             coordsActuelles.lon = lon;
 
-            // Calcul de la bounding box pour la zone de surveillance
-            const kmToDegrees = rayon / 111; // Approximation: 1 degré ≈ 111 km
+            const kmToDegrees = rayon / 111;
             const minLat = lat - kmToDegrees;
             const maxLat = lat + kmToDegrees;
             const minLon = lon - (kmToDegrees / Math.cos(lat * Math.PI / 180));
             const maxLon = lon + (kmToDegrees / Math.cos(lat * Math.PI / 180));
 
-            // Construction de l'URL avec paramètres
             const params = new URLSearchParams({
                 minLat: minLat.toString(),
                 maxLat: maxLat.toString(),
@@ -1177,7 +1135,8 @@
                 pageSize: '100'
             });
 
-            const url = `/.netlify/functions/euris-proxy?${params.toString()}`;
+            // *** URL MODIFIÉE POUR HOSTINGER ***
+            const url = `api/euris-proxy.php?${params.toString()}`;
             
             console.log('🌐 URL appelée:', url);
             
@@ -1217,12 +1176,10 @@
             const data = await response.json();
             console.log('📊 Données reçues:', data);
             
-            // Validation de la structure des données
             if (!data) {
                 throw new Error('Réponse vide de l\'API');
             }
 
-            // Extraction des navires selon la structure de données
             let naviresData = [];
             if (data.tracks && Array.isArray(data.tracks)) {
                 naviresData = data.tracks;
@@ -1235,11 +1192,7 @@
                 naviresData = [];
             }
 
-            console.log(`📊 ${naviresData.length} navires trouvés dans la réponse`);
-
-            // Filtrage des navires dans la zone de surveillance avec validation des coordonnées
             const naviresFiltrés = naviresData.filter(navire => {
-                // Vérification que le navire a des coordonnées valides
                 if (!navire || typeof navire.latitude !== 'number' || typeof navire.longitude !== 'number') {
                     console.warn('⚠️ Navire sans coordonnées valides:', navire);
                     return false;
@@ -1259,26 +1212,18 @@
                 console.log('🔄 Début de la mise à jour des données');
                 afficherStatut('connecting', 'Connexion à l\'API EuRIS...');
                 
-                // Récupération des nouveaux données
                 navires = await recupererNavires();
                 
                 console.log(`📊 ${navires.length} navires récupérés`);
                 
-                // Mise à jour de la base et des cercles si les coordonnées ont changé
                 mettreAJourBase();
-                
-                // Centrage de la carte sur les nouvelles coordonnées
                 map.setView([coordsActuelles.lat, coordsActuelles.lon], map.getZoom());
                 
-                // Mise à jour de tous les éléments de l'interface
                 mettreAJourMarqueurs();
                 mettreAJourListeNavires();
                 mettreAJourStatistiques();
-                
-                // Gestion des alertes
                 gererAlertes();
                 
-                // Affichage du statut de succès
                 const naviresAfficher = filtrerNavires(navires);
                 if (naviresAfficher.length > 0) {
                     afficherStatut('connected', `${naviresAfficher.length} navires surveillés`);
@@ -1292,10 +1237,8 @@
             } catch (error) {
                 console.error('❌ Erreur lors de la mise à jour:', error);
                 
-                // Affichage du statut d'erreur
                 afficherStatut('error', 'Erreur de connexion');
                 
-                // Affichage de l'erreur dans l'interface avec détails
                 let messageErreur = error.message;
                 let details = null;
                 
@@ -1303,7 +1246,6 @@
                     details = error.details;
                 }
                 
-                // Messages d'erreur plus explicites selon le type
                 if (error.status) {
                     switch (error.status) {
                         case 401:
@@ -1331,7 +1273,7 @@
             }
         }
 
-        // Gestion du compteur de rafraîchissement automatique
+        // Gestion du compteur de rafraîchissement
         function demarrerCompteur() {
             const compteurElement = document.getElementById('compteurRefresh');
             const tempsElement = document.getElementById('tempsRestant');
@@ -1343,8 +1285,8 @@
                 tempsRestant--;
                 
                 if (tempsRestant < 0) {
-                    tempsRestant = 10; // Reset du compteur
-                    mettreAJourDonnees(); // Mise à jour des données
+                    tempsRestant = 10;
+                    mettreAJourDonnees();
                 }
             }, 1000);
         }
@@ -1355,7 +1297,6 @@
             
             surveillanceActive = false;
             
-            // Arrêt des intervalles
             if (intervalleRefresh) {
                 clearInterval(intervalleRefresh);
             }
@@ -1363,44 +1304,36 @@
                 clearInterval(intervalleCompteur);
             }
             
-            // Masquage du compteur
             document.getElementById('compteurRefresh').style.display = 'none';
             
-            // Réinitialisation du bouton
             const btn = document.getElementById('btnSurveillance');
             btn.textContent = '🔍 Démarrer la surveillance';
             btn.disabled = false;
             
-            // Masquage du statut
             document.getElementById('statusIndicator').style.display = 'none';
             
-            // Nettoyage des alertes actives
             naviresEnAlerte.clear();
             
-            // Suppression des bannières d'alerte
             const banniere = document.getElementById('banniereAlerte');
             if (banniere) banniere.remove();
             
             const panneau = document.getElementById('panneauAttention');
             if (panneau) panneau.remove();
             
-            // Réinitialisation de l'affichage
             document.getElementById('listeNavires').innerHTML = '<div class="loading">Cliquez sur "Démarrer la surveillance" pour commencer...</div>';
         }
 
-        // Démarrage de la surveillance (fonction appelée par le bouton)
+        // Démarrage de la surveillance
         async function demarrerSurveillance() {
             console.log('🚀 Démarrage de la surveillance automatique');
             
             const btn = document.getElementById('btnSurveillance');
             
-            // Si la surveillance est active, l'arrêter
             if (surveillanceActive) {
                 arreterSurveillance();
                 return;
             }
             
-            // Validation des champs requis
             const token = document.getElementById('token').value.trim();
             if (!token) {
                 alert('Veuillez saisir votre token API EuRIS');
@@ -1422,18 +1355,14 @@
             }
             
             try {
-                // Mise à jour du bouton
                 btn.textContent = '⏹️ Arrêter la surveillance';
                 btn.disabled = true;
                 
-                // Première récupération immédiate pour valider la connexion
                 await mettreAJourDonnees();
                 
-                // Activation de la surveillance
                 surveillanceActive = true;
                 btn.disabled = false;
                 
-                // Démarrage du compteur de rafraîchissement (10 secondes)
                 tempsRestant = 10;
                 demarrerCompteur();
                 
@@ -1442,11 +1371,9 @@
             } catch (error) {
                 console.error('❌ Erreur lors du démarrage:', error);
                 
-                // Réinitialisation du bouton en cas d'erreur
                 btn.textContent = '🔍 Démarrer la surveillance';
                 btn.disabled = false;
                 
-                // Affichage de l'erreur
                 let messageErreur = error.message;
                 if (error.status === 401) {
                     messageErreur = 'Token invalide. Vérifiez votre token API EuRIS.';
@@ -1458,19 +1385,18 @@
             }
         }
 
-        // Initialisation au chargement de la page
+        // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🌟 Initialisation de l\'application de surveillance');
+            console.log('🌟 Initialisation de l\'application TrackShip');
             initMap();
             
-            // Gestion de l'arrêt de la surveillance lors de la fermeture de la page
             window.addEventListener('beforeunload', function() {
                 if (surveillanceActive) {
                     arreterSurveillance();
                 }
             });
             
-            console.log('✅ Application initialisée et prête');
+            console.log('✅ Application initialisée et prête sur trackship.bakabi.fr');
         });
     </script>
 </body>
