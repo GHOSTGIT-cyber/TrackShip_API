@@ -347,46 +347,6 @@
             border: 1px solid #bee5eb;
         }
 
-        /* Panneau d'attention pour 1km - Haut gauche */
-        .panneau-attention {
-            position: fixed;
-            top: 80px;
-            left: 20px;
-            background: linear-gradient(45deg, #ff9800, #f57c00);
-            color: white;
-            padding: 20px;
-            border-radius: 15px;
-            font-size: 18px;
-            font-weight: bold;
-            z-index: 10001;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-            text-align: left;
-            border: 3px solid #fff;
-            animation: shake-left 0.5s infinite;
-            max-width: 350px;
-            min-width: 300px;
-            max-height: 400px;
-            overflow-y: auto;
-        }
-
-        @keyframes shake-left {
-            0%, 100% { transform: translateX(0) rotate(0deg); }
-            25% { transform: translateX(-2px) rotate(-1deg); }
-            75% { transform: translateX(2px) rotate(1deg); }
-        }
-
-        .navire-panneau {
-            margin-bottom: 15px;
-            padding: 10px;
-            background: rgba(255,255,255,0.1);
-            border-radius: 8px;
-            border-left: 3px solid #fff;
-        }
-
-        .navire-panneau:last-child {
-            margin-bottom: 0;
-        }
-
         /* Status indicator */
         .status-indicator {
             padding: 10px 20px;
@@ -630,13 +590,6 @@
                 min-width: 150px;
             }
             
-            .panneau-attention {
-                top: 60px;
-                left: 10px;
-                max-width: calc(100vw - 20px);
-                font-size: 16px;
-            }
-            
             .navire-marker-directionnel {
                 transform: scale(0.8);
             }
@@ -685,6 +638,195 @@
         @keyframes gradient-flow {
             0%, 100% { background-position: 0% 50%; }
             50% { background-position: 100% 50%; }
+        }
+        /* Styles pour le panneau d'attention intégré dans la sidebar */
+        .panneau-attention-sidebar {
+            background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            animation: glow-orange 2s ease-in-out infinite alternate;
+        }
+
+        .panneau-attention-sidebar .panneau-titre {
+            display: flex;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .panneau-attention-sidebar .panneau-titre span {
+            margin-right: 10px;
+            font-size: 20px;
+        }
+
+        .navire-panneau-sidebar {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-left: 3px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .navire-panneau-sidebar:last-child {
+            margin-bottom: 0;
+        }
+
+        @keyframes glow-orange {
+            from { 
+                box-shadow: 0 4px 12px rgba(255, 152, 0, 0.3);
+            }
+            to { 
+                box-shadow: 0 4px 20px rgba(255, 152, 0, 0.6), 0 0 15px rgba(255, 152, 0, 0.2);
+            }
+        }
+
+        /* Amélioration des icônes avec numéros */
+        .navire-marker-directionnel {
+            background: none !important;
+            border: none !important;
+            box-shadow: none !important;
+        }
+
+        /* Style pour les numéros des navires dans les listes */
+        .navire-item .navire-nom {
+            position: relative;
+        }
+
+        .navire-numero {
+            display: inline-block;
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 10px;
+            font-weight: bold;
+            margin-right: 8px;
+            box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+        }
+
+        /* Animation pour les nouvelles attributions de numéros */
+        @keyframes numero-nouveau {
+            0% { transform: scale(0.8); opacity: 0; }
+            50% { transform: scale(1.2); opacity: 1; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .numero-nouveau {
+            animation: numero-nouveau 0.5s ease-out;
+        }
+
+        /* Responsive pour le panneau sidebar */
+        @media (max-width: 768px) {
+            .panneau-attention-sidebar {
+                margin-bottom: 15px;
+                padding: 12px;
+                border-radius: 8px;
+            }
+            
+            .panneau-attention-sidebar .panneau-titre {
+                font-size: 14px;
+                margin-bottom: 10px;
+            }
+            
+            .navire-panneau-sidebar {
+                padding: 8px;
+                margin-bottom: 8px;
+            }
+            
+            .navire-panneau-sidebar > div:first-child {
+                font-size: 13px !important;
+            }
+            
+            .navire-panneau-sidebar > div:last-child {
+                font-size: 11px !important;
+            }
+        }
+
+        /* Amélioration des statistiques avec la nouvelle ligne */
+        .stats .stat-item:nth-child(6) {
+            background: linear-gradient(135deg, rgba(0, 123, 255, 0.1), rgba(0, 86, 179, 0.1));
+            border-radius: 5px;
+            padding: 8px;
+            margin: 5px -5px;
+        }
+
+        /* Style pour indiquer les coordonnées verrouillées */
+        .coords-locked-indicator {
+            display: inline-block;
+            margin-left: 10px;
+            padding: 4px 8px;
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+            border-radius: 12px;
+            font-size: 10px;
+            font-weight: bold;
+            box-shadow: 0 2px 4px rgba(40, 167, 69, 0.3);
+        }
+
+        /* Animations plus fluides pour les alertes */
+        .banniere-alerte {
+            background: linear-gradient(45deg, #dc3545, #c82333, #dc3545);
+            background-size: 400% 400%;
+            animation: gradient-flow-smooth 3s ease infinite, pulse-alert-smooth 2s infinite;
+        }
+
+        @keyframes gradient-flow-smooth {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+
+        @keyframes pulse-alert-smooth {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.9; transform: scale(1.01); }
+        }
+
+        /* Style pour les icônes plus grandes avec numéros */
+        .navire-marker-directionnel .leaflet-div-icon {
+            background: transparent !important;
+            border: none !important;
+            overflow: visible !important;
+        }
+
+        /* Indicateur de persistance dans les stats */
+        .stat-item .stat-value.persistent {
+            color: #007bff;
+            font-weight: bold;
+            position: relative;
+        }
+
+        .stat-item .stat-value.persistent::after {
+            content: '💾';
+            font-size: 10px;
+            margin-left: 4px;
+            opacity: 0.7;
+        }
+
+        /* Amélioration du contraste pour la lisibilité */
+        .navire-panneau-sidebar div:last-child {
+            background: rgba(0, 0, 0, 0.1);
+            border-radius: 4px;
+            padding: 5px;
+            margin-top: 5px;
+        }
+
+        /* Style pour les coordonnées dans les popups avec indication de verrouillage */
+        .popup-coords-locked {
+            background: rgba(40, 167, 69, 0.1);
+            border: 1px solid rgba(40, 167, 69, 0.3);
+            border-radius: 4px;
+            padding: 4px 8px;
+            margin-top: 5px;
+        }
+
+        .popup-coords-locked::before {
+            content: '🔒 ';
+            color: #28a745;
+            font-weight: bold;
         }
 
         

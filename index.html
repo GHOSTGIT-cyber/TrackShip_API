@@ -23,7 +23,7 @@
     <div class="container">
         <div class="header">
             <h1>🛰️ Surveillance des navires en mouvement (Seine)</h1>
-            <p> • surveillance automatique avec alertes de proximité • Suivi temps réel zone rouge</p>
+            <p> • surveillance automatique avec alertes de proximité • Suivi temps réel zone rouge • Numérotation persistante</p>
         </div>
 
         <div class="controls">
@@ -31,14 +31,6 @@
                 <div>
                     <label for="token">🔑 Token Foil in Paris</label>
                     <input type="text" id="token" placeholder="Votre token d'accès EuRIS">
-                </div>
-                <div>
-                    <label for="latitude">📍 Latitude centre</label>
-                    <input type="number" id="latitude" value="48.853229" step="0.000001">
-                </div>
-                <div>
-                    <label for="longitude">📍 Longitude centre</label>
-                    <input type="number" id="longitude" value="2.225328" step="0.000001">
                 </div>
                 <div>
                     <label for="rayon">📏 Rayon (km)</label>
@@ -92,9 +84,22 @@
                         <span class="stat-value" id="naviresTrackes">0</span>
                     </div>
                     <div class="stat-item">
+                        <span class="stat-label">📋 Navires numérotés</span>
+                        <span class="stat-value" id="naviresNumerotes">0</span>
+                    </div>
+                    <div class="stat-item">
                         <span class="stat-label">Dernière MAJ</span>
                         <span class="stat-value" id="derniereMaj">Jamais</span>
                     </div>
+                </div>
+
+                <!-- Panneau d'attention intégré dans la sidebar -->
+                <div id="panneauAttentionSidebar" class="panneau-attention-sidebar" style="display: none;">
+                    <div class="panneau-titre">
+                        <span>🟠</span>
+                        <strong>NAVIRES EN MOUVEMENT - ZONE 2KM</strong>
+                    </div>
+                    <div id="contenuPanneauAttention"></div>
                 </div>
 
                 <div class="navires-list">
@@ -117,7 +122,7 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // Configuration de la base de surveillance
+        // Configuration de la base de surveillance - VERROUILLÉE CÔTÉ BACKEND
         const BASE_COORDS = {
             lat: 48.853229,
             lon: 2.225328
@@ -150,19 +155,135 @@
         let coordsActuelles = {...BASE_COORDS};
         let modeActualisation = 'normal'; // 'normal' ou 'alerte'
 
-        console.log('🚢 TrackShip chargé sur trackship.bakabi.fr - Version améliorée');
+        // ===== SYSTÈME DE NUMÉROTATION PERSISTANT =====
+        let compteurJournalier = 1;
+        let derniereReinitialisation = null;
+        let naviresNumerotes = new Map(); // MMSI -> {numero, dateAttribution, premiereDetection}
+        let prochainNumero = 1;
 
-        // Fonction pour créer une icône directionnelle
+        // Initialisation du système de numérotation
+        function initialiserNumerotation() {
+            const aujourdhui = new Date().toDateString();
+            
+            // Récupération depuis localStorage
+            const donneesStockees = localStorage.getItem('trackship_numerotation');
+            if (donneesStockees) {
+                try {
+                    const donnees = JSON.parse(donneesStockees);
+                    
+                    // Vérifier si c'est le même jour
+                    if (donnees.date === aujourdhui) {
+                        naviresNumerotes = new Map(donnees.navires);
+                        prochainNumero = donnees.prochainNumero;
+                        derniereReinitialisation = donnees.date;
+                        console.log(`📋 Numérotation restaurée: ${naviresNumerotes.size} navires, prochain numéro: ${prochainNumero}`);
+                    } else {
+                        console.log('📅 Nouvelle journée détectée, reset de la numérotation');
+                        reinitialiserNumerotation();
+                    }
+                } catch (e) {
+                    console.warn('⚠️ Erreur lors de la restauration de la numérotation:', e);
+                    reinitialiserNumerotation();
+                }
+            } else {
+                reinitialiserNumerotation();
+            }
+        }
+
+        // Réinitialisation de la numérotation pour une nouvelle journée
+        function reinitialiserNumerotation() {
+            naviresNumerotes.clear();
+            prochainNumero = 1;
+            derniereReinitialisation = new Date().toDateString();
+            sauvegarderNumerotation();
+            console.log('🔄 Numérotation réinitialisée pour une nouvelle journée');
+        }
+
+        // Sauvegarde de la numérotation
+        function sauvegarderNumerotation() {
+            try {
+                const donnees = {
+                    date: derniereReinitialisation,
+                    navires: Array.from(naviresNumerotes.entries()),
+                    prochainNumero: prochainNumero
+                };
+                localStorage.setItem('trackship_numerotation', JSON.stringify(donnees));
+            } catch (e) {
+                console.warn('⚠️ Erreur lors de la sauvegarde de la numérotation:', e);
+            }
+        }
+
+        // Attribution d'un numéro à un navire
+        function attribuerNumero(navire) {
+            // Vérifier si nouvelle journée
+            const aujourdhui = new Date().toDateString();
+            if (derniereReinitialisation !== aujourdhui) {
+                reinitialiserNumerotation();
+            }
+
+            const mmsi = navire.mmsi?.toString();
+            if (!mmsi) return null;
+
+            // Si le navire a déjà un numéro, le retourner
+            if (naviresNumerotes.has(mmsi)) {
+                return naviresNumerotes.get(mmsi).numero;
+            }
+
+            // Vérifier si le navire est dans la zone verte (zone d'approche)
+            const analyse = analyserNavire(navire);
+            const distance = calculerDistance(
+                coordsActuelles.lat, coordsActuelles.lon,
+                navire.latitude, navire.longitude
+            );
+
+            const rayonSaisi = parseFloat(document.getElementById('rayon').value) || 3;
+            let rayonZoneVerte = ZONES_BASE.APPROCHE;
+            if (rayonSaisi > 3) {
+                rayonZoneVerte = ZONES_BASE.APPROCHE * (rayonSaisi / 3);
+            }
+
+            // Attribution du numéro seulement si dans la zone verte ou plus proche
+            if (distance <= rayonZoneVerte) {
+                const nouveauNumero = prochainNumero++;
+                naviresNumerotes.set(mmsi, {
+                    numero: nouveauNumero,
+                    dateAttribution: new Date().toISOString(),
+                    premiereDetection: {
+                        lat: navire.latitude,
+                        lon: navire.longitude,
+                        distance: Math.round(distance)
+                    }
+                });
+                
+                sauvegarderNumerotation();
+                console.log(`🏷️ Nouveau numéro attribué: #${nouveauNumero} à "${navire.shipName}" (${mmsi})`);
+                return nouveauNumero;
+            }
+
+            return null;
+        }
+
+        // Récupération du numéro d'un navire
+        function obtenirNumeroNavire(navire) {
+            const mmsi = navire.mmsi?.toString();
+            if (!mmsi || !naviresNumerotes.has(mmsi)) return null;
+            return naviresNumerotes.get(mmsi).numero;
+        }
+
+        console.log('🚢 TrackShip chargé sur trackship.bakabi.fr - Version avec numérotation persistante');
+
+        // Fonction pour créer une icône directionnelle avec numéro
         function creerIconeDirectionnelle(navire, analyse) {
             const enMouvement = estEnMouvement(navire);
             const course = parseFloat(navire.course) || 0;
+            const numeroNavire = attribuerNumero(navire);
             
             // Couleur selon le statut
             let couleur = analyse.couleur;
-            let taille = enMouvement ? 24 : 18;
+            let taille = enMouvement ? 32 : 24; // Plus grandes icônes
             let opacite = enMouvement ? 1 : 0.6;
             
-            // Création de l'icône avec flèche directionnelle
+            // Création de l'icône avec flèche directionnelle et numéro
             let iconeHtml;
             
             if (enMouvement && course !== null && course !== undefined) {
@@ -188,19 +309,15 @@
                         "></div>
                         <div style="
                             position: absolute;
-                            bottom: 2px;
+                            bottom: 4px;
                             left: 50%;
                             transform: translateX(-50%) rotate(-${course}deg);
-                            font-size: 10px;
+                            font-size: 12px;
                             color: white;
                             text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
                         ">🚢</div>
                     </div>
                 `;
-                
-                if (analyse.emoji) {
-                    iconeHtml += `<span style="position: absolute; top: -8px; right: -8px; font-size: 14px; z-index: 1000;">${analyse.emoji}</span>`;
-                }
             } else {
                 // Navire à l'arrêt ou sans cap - icône circulaire classique
                 iconeHtml = `
@@ -209,27 +326,51 @@
                         width: ${taille}px;
                         height: ${taille}px;
                         border-radius: 50%;
-                        border: 2px solid white;
+                        border: 3px solid white;
                         box-shadow: 0 2px 4px rgba(0,0,0,0.3);
                         display: flex;
                         align-items: center;
                         justify-content: center;
-                        font-size: 10px;
+                        font-size: 12px;
                         opacity: ${opacite};
                         position: relative;
                     ">🚢</div>
                 `;
-                
-                if (analyse.emoji) {
-                    iconeHtml += `<span style="position: absolute; top: -8px; right: -8px; font-size: 14px;">${analyse.emoji}</span>`;
-                }
+            }
+
+            // Ajout du numéro si attribué
+            if (numeroNavire) {
+                iconeHtml += `
+                    <div style="
+                        position: absolute;
+                        top: -8px;
+                        right: -8px;
+                        background: #fff;
+                        color: #333;
+                        border: 2px solid ${couleur};
+                        border-radius: 50%;
+                        width: 20px;
+                        height: 20px;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                        font-size: 10px;
+                        font-weight: bold;
+                        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+                    ">#${numeroNavire}</div>
+                `;
+            }
+            
+            // Ajout de l'emoji d'alerte si nécessaire
+            if (analyse.emoji) {
+                iconeHtml += `<span style="position: absolute; top: ${numeroNavire ? '-12px' : '-8px'}; left: -8px; font-size: 16px; z-index: 1000;">${analyse.emoji}</span>`;
             }
 
             return L.divIcon({
                 html: iconeHtml,
-                iconSize: [taille + 4, taille + 4],
-                iconAnchor: [taille/2 + 2, taille/2 + 2],
-                popupAnchor: [0, -(taille/2 + 2)],
+                iconSize: [taille + 8, taille + 8],
+                iconAnchor: [taille/2 + 4, taille/2 + 4],
+                popupAnchor: [0, -(taille/2 + 4)],
                 className: 'navire-marker-directionnel'
             });
         }
@@ -309,7 +450,7 @@
             
             baseMarker = L.marker([coordsActuelles.lat, coordsActuelles.lon], {icon: baseIcon})
                 .addTo(map)
-                .bindPopup('<b>🏭 Base de surveillance</b><br>trackship.bakabi.fr');
+                .bindPopup('<b>🏭 Base de surveillance</b><br>trackship.bakabi.fr<br>📍 Coordonnées verrouillées côté serveur');
             
             baseMarker.on('error', function() {
                 baseMarker.setIcon(fallbackIcon);
@@ -352,7 +493,7 @@
                 radius: rayons.APPROCHE,
                 weight: 2,
                 dashArray: '5, 5'
-            }).addTo(map).bindPopup(`Zone d'approche (${Math.round(rayons.APPROCHE/1000*10)/10}km)`);
+            }).addTo(map).bindPopup(`Zone d'approche (${Math.round(rayons.APPROCHE/1000*10)/10}km) - Attribution numéros`);
             cercles.push(cercleApproche);
 
             if (rayonSaisi > 3) {
@@ -506,56 +647,51 @@
             }
         }
 
-        // Panneau d'attention pour navires en mouvement < 2km
-        function afficherPanneauAttention(naviresVigilance) {
-            const panneauExistant = document.getElementById('panneauAttention');
-            if (panneauExistant) {
-                panneauExistant.remove();
-            }
+        // Panneau d'attention pour navires en mouvement < 2km - VERSION SIDEBAR
+        function afficherPanneauAttentionSidebar(naviresVigilance) {
+            const panneauElement = document.getElementById('panneauAttentionSidebar');
+            const contenuElement = document.getElementById('contenuPanneauAttention');
 
             const naviresEnMouvementVigilance = naviresVigilance.filter(navire => estEnMouvement(navire));
 
-            if (naviresEnMouvementVigilance.length === 0) return;
+            if (naviresEnMouvementVigilance.length === 0) {
+                panneauElement.style.display = 'none';
+                return;
+            }
 
-            console.log('⚠️ Panneau attention pour', naviresEnMouvementVigilance.length, 'navire(s) en mouvement');
+            console.log('⚠️ Panneau attention sidebar pour', naviresEnMouvementVigilance.length, 'navire(s) en mouvement');
             
-            const panneau = document.createElement('div');
-            panneau.id = 'panneauAttention';
-            panneau.className = 'panneau-attention';
+            panneauElement.style.display = 'block';
             
-            let contenuPanneau = `
-                <div style="display: flex; align-items: center; margin-bottom: 15px;">
-                    <span style="font-size: 24px; margin-right: 10px;">🟠</span>
-                    <strong>NAVIRES EN MOUVEMENT - ZONE 2KM</strong>
-                </div>
-            `;
+            let contenuPanneau = '';
             
             naviresEnMouvementVigilance.forEach(navire => {
                 const analyse = analyserNavire(navire);
                 const cap = navire.course ? `${Math.round(navire.course)}°` : 'N/A';
+                const numeroNavire = obtenirNumeroNavire(navire);
+                const numeroText = numeroNavire ? `#${numeroNavire}` : '';
+                
                 contenuPanneau += `
-                    <div class="navire-panneau">
-                        <div style="font-size: 16px; margin-bottom: 5px;">
-                            <strong>"${navire.shipName || 'Inconnu'}"</strong> 🔄
+                    <div class="navire-panneau-sidebar">
+                        <div style="font-size: 14px; margin-bottom: 5px;">
+                            <strong>"${navire.shipName || 'Inconnu'}" ${numeroText}</strong> 🔄
                         </div>
-                        <div style="font-size: 14px; opacity: 0.9;">
-                            Distance: <strong>${analyse.distance}m</strong><br>
-                            Vitesse: <strong>${navire.speed || 'N/A'} kn</strong><br>
-                            Cap: <strong>${cap}</strong><br>
-                            Longueur: <strong>${navire.length || 'N/A'} m</strong>
+                        <div style="font-size: 12px; opacity: 0.9; display: grid; grid-template-columns: 1fr 1fr; gap: 5px;">
+                            <span>Distance: <strong>${analyse.distance}m</strong></span>
+                            <span>Vitesse: <strong>${navire.speed || 'N/A'} kn</strong></span>
+                            <span>Cap: <strong>${cap}</strong></span>
+                            <span>Longueur: <strong>${navire.length || 'N/A'} m</strong></span>
                         </div>
                     </div>
                 `;
             });
             
-            panneau.innerHTML = contenuPanneau;
-            document.body.appendChild(panneau);
+            contenuElement.innerHTML = contenuPanneau;
             
+            // Scroll automatique vers le panneau si nécessaire
             setTimeout(() => {
-                if (document.getElementById('panneauAttention')) {
-                    panneau.remove();
-                }
-            }, 8000);
+                panneauElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }, 100);
         }
 
         // Alerte rouge pour navires en mouvement < 1km
@@ -569,12 +705,14 @@
 
             const analyse = analyserNavire(navire);
             const cap = navire.course ? `${Math.round(navire.course)}°` : 'N/A';
+            const numeroNavire = obtenirNumeroNavire(navire);
+            const numeroText = numeroNavire ? `#${numeroNavire} ` : '';
             
             const banniere = document.createElement('div');
             banniere.id = 'banniereAlerte';
             banniere.className = 'banniere-alerte';
             banniere.innerHTML = `
-                🚨 ALERTE ZONE 1KM 🚨 - Navire en mouvement "${navire.shipName || 'Inconnu'}" ! 
+                🚨 ALERTE ZONE 1KM 🚨 - Navire ${numeroText}"${navire.shipName || 'Inconnu'}" en mouvement ! 
                 Distance: ${analyse.distance}m - Vitesse: ${navire.speed || 'N/A'} kn - Cap: ${cap}
             `;
             
@@ -632,17 +770,21 @@
             naviresAfficher.forEach(navire => {
                 const analyse = analyserNavire(navire);
                 const enMouvement = estEnMouvement(navire);
+                const numeroNavire = obtenirNumeroNavire(navire);
                 
-                // Utilisation de l'icône directionnelle améliorée
+                // Utilisation de l'icône directionnelle améliorée avec numéro
                 const iconeNavire = creerIconeDirectionnelle(navire, analyse);
 
                 const cap = navire.course ? `${Math.round(navire.course)}°` : 'N/A';
+                const numeroText = numeroNavire ? `#${numeroNavire}` : 'Non numéroté';
+                
                 const popupContent = `
-                    <div style="min-width: 200px;">
+                    <div style="min-width: 220px;">
                         <h4 style="margin: 0 0 10px 0; color: ${analyse.couleur};">
                             🚢 ${navire.shipName || 'Navire inconnu'} ${analyse.emoji}
                         </h4>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 12px;">
+                            <div><strong>Numéro:</strong> ${numeroText}</div>
                             <div><strong>Vitesse:</strong> ${navire.speed || 'N/A'} kn</div>
                             <div><strong>Cap:</strong> ${cap}</div>
                             <div><strong>Longueur:</strong> ${navire.length || 'N/A'} m</div>
@@ -699,12 +841,14 @@
                 const enMouvement = estEnMouvement(navire);
                 const estTracke = naviresTrackes.has(navire.mmsi?.toString());
                 const cap = navire.course ? `${Math.round(navire.course)}°` : 'N/A';
+                const numeroNavire = obtenirNumeroNavire(navire);
+                const numeroText = numeroNavire ? `#${numeroNavire}` : '';
                 
                 return `
                     <div class="navire-item ${analyse.classeCSS}" onclick="centrerSurNavire(${navire.latitude}, ${navire.longitude})">
                         <div class="navire-header">
                             <span class="navire-nom">
-                                🚢 ${navire.shipName || 'Navire inconnu'} ${analyse.emoji}
+                                🚢 ${numeroText} ${navire.shipName || 'Navire inconnu'} ${analyse.emoji}
                                 ${enMouvement ? '🔄' : '⏸️'}
                                 ${estTracke ? '🎯' : ''}
                             </span>
@@ -713,6 +857,10 @@
                             </span>
                         </div>
                         <div class="navire-details">
+                            <div class="navire-detail">
+                                <span>Numéro:</span>
+                                <strong>${numeroText || 'Non attribué'}</strong>
+                            </div>
                             <div class="navire-detail">
                                 <span>Vitesse:</span>
                                 <strong>${navire.speed || 'N/A'} kn</strong>
@@ -728,10 +876,6 @@
                             <div class="navire-detail">
                                 <span>MMSI:</span>
                                 <strong>${navire.mmsi || 'N/A'}</strong>
-                            </div>
-                            <div class="navire-detail">
-                                <span>Type:</span>
-                                <strong>${navire.shipType || 'N/A'}</strong>
                             </div>
                             <div class="navire-detail">
                                 <span>Statut:</span>
@@ -761,6 +905,8 @@
             const htmlNonConformes = naviresNonConformes.map(navire => {
                 const analyse = analyserNavire(navire);
                 const enMouvement = estEnMouvement(navire);
+                const numeroNavire = obtenirNumeroNavire(navire);
+                const numeroText = numeroNavire ? `#${numeroNavire}` : '';
                 
                 let raisonNonConforme = [];
                 if (!navire.shipName || navire.shipName.trim() === '') raisonNonConforme.push('Nom manquant');
@@ -772,13 +918,17 @@
                     <div class="navire-item navire-non-conforme" onclick="centrerSurNavire(${navire.latitude}, ${navire.longitude})">
                         <div class="navire-header">
                             <span class="navire-nom">
-                                ⚠️ ${navire.shipName || 'Inconnu'} ${enMouvement ? '🔄' : '⏸️'}
+                                ⚠️ ${numeroText} ${navire.shipName || 'Inconnu'} ${enMouvement ? '🔄' : '⏸️'}
                             </span>
                             <span class="navire-distance distance-vigilance">
                                 ${analyse.distance}m
                             </span>
                         </div>
                         <div class="navire-details">
+                            <div class="navire-detail">
+                                <span>Numéro:</span>
+                                <strong>${numeroText || 'Non attribué'}</strong>
+                            </div>
                             <div class="navire-detail">
                                 <span>Vitesse:</span>
                                 <strong>${navire.speed || 'N/A'} kn</strong>
@@ -831,6 +981,7 @@
             document.getElementById('naviresVigilance').textContent = vigilance;
             document.getElementById('naviresAlerte').textContent = alerte;
             document.getElementById('naviresTrackes').textContent = naviresTrackes.size;
+            document.getElementById('naviresNumerotes').textContent = naviresNumerotes.size;
             document.getElementById('derniereMaj').textContent = new Date().toLocaleTimeString('fr-FR');
         }
 
@@ -850,10 +1001,8 @@
             
             const naviresAlerteMouvement = naviresZoneAlerte.filter(navire => estEnMouvement(navire));
             
-            // Panneau orange : navires EN MOUVEMENT dans zone 2km
-            if (naviresZoneVigilance.length > 0) {
-                afficherPanneauAttention(naviresZoneVigilance);
-            }
+            // Panneau orange : navires EN MOUVEMENT dans zone 2km - VERSION SIDEBAR
+            afficherPanneauAttentionSidebar(naviresZoneVigilance);
             
             // Bannière rouge : navires EN MOUVEMENT dans zone 1km
             if (naviresAlerteMouvement.length > 0) {
@@ -879,20 +1028,19 @@
             console.log('🔄 Récupération des navires depuis EuRIS...', modeCible ? '(Mode ciblé)' : '');
             
             const token = document.getElementById('token').value;
-            const lat = parseFloat(document.getElementById('latitude').value);
-            const lon = parseFloat(document.getElementById('longitude').value);
             const rayon = parseFloat(document.getElementById('rayon').value);
 
             if (!token) {
                 throw new Error('Token API requis');
             }
 
-            if (isNaN(lat) || isNaN(lon) || isNaN(rayon)) {
-                throw new Error('Coordonnées invalides');
+            if (isNaN(rayon)) {
+                throw new Error('Rayon invalide');
             }
 
-            coordsActuelles.lat = lat;
-            coordsActuelles.lon = lon;
+            // Les coordonnées sont maintenant verrouillées côté backend
+            const lat = BASE_COORDS.lat;
+            const lon = BASE_COORDS.lon;
 
             // Calcul GPS comme avant (fonctionne)
             const kmToDegrees = rayon / 111;
@@ -908,12 +1056,6 @@
                 maxLon: maxLon.toFixed(6),
                 pageSize: modeCible && naviresTrackes.size > 0 ? '20' : '100'
             });
-
-            // Si on a des navires trackés et qu'on est en mode alerte, on peut ajouter un filtre MMSI
-            if (modeCible && naviresTrackes.size > 0 && naviresTrackes.size <= 10) {
-                // Optionnel: ajouter les MMSI trackés pour une requête plus ciblée
-                // params.append('mmsi', Array.from(naviresTrackes.keys()).join(','));
-            }
 
             const url = `api/euris-proxy.php?${params.toString()}`;
             
@@ -1025,6 +1167,9 @@
                 if (naviresNonConformes.length > 0) {
                     statusMessage += ` - ${naviresNonConformes.length} non conformes`;
                 }
+                if (naviresNumerotes.size > 0) {
+                    statusMessage += ` - ${naviresNumerotes.size} numérotés`;
+                }
                 
                 if (naviresAfficher.length > 0 || naviresNonConformes.length > 0) {
                     afficherStatut('connected', statusMessage);
@@ -1107,6 +1252,7 @@
             }
             
             document.getElementById('compteurRefresh').style.display = 'none';
+            document.getElementById('panneauAttentionSidebar').style.display = 'none';
             
             const btn = document.getElementById('btnSurveillance');
             btn.textContent = '🔍 Démarrer la surveillance';
@@ -1122,10 +1268,9 @@
             const banniere = document.getElementById('banniereAlerte');
             if (banniere) banniere.remove();
             
-            const panneau = document.getElementById('panneauAttention');
-            if (panneau) panneau.remove();
-            
             document.getElementById('listeNavires').innerHTML = '<div class="loading">Cliquez sur "Démarrer la surveillance" pour commencer...</div>';
+            
+            console.log(`📋 Numérotation persistante: ${naviresNumerotes.size} navires gardés en mémoire`);
         }
 
         // Démarrage de la surveillance
@@ -1145,12 +1290,10 @@
                 return;
             }
             
-            const lat = parseFloat(document.getElementById('latitude').value);
-            const lon = parseFloat(document.getElementById('longitude').value);
             const rayon = parseFloat(document.getElementById('rayon').value);
             
-            if (isNaN(lat) || isNaN(lon) || isNaN(rayon)) {
-                alert('Veuillez vérifier les coordonnées et le rayon');
+            if (isNaN(rayon)) {
+                alert('Veuillez vérifier le rayon');
                 return;
             }
             
@@ -1192,17 +1335,24 @@
 
         // Initialisation
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🌟 Initialisation de l\'application TrackShip - Version améliorée');
+            console.log('🌟 Initialisation de l\'application TrackShip - Version avec numérotation persistante');
+            
+            // Initialisation du système de numérotation
+            initialiserNumerotation();
+            
             initMap();
             
             window.addEventListener('beforeunload', function() {
                 if (surveillanceActive) {
                     arreterSurveillance();
                 }
+                // Sauvegarde finale de la numérotation
+                sauvegarderNumerotation();
             });
             
             console.log('✅ Application initialisée et prête sur trackship.bakabi.fr');
-            console.log('🎯 Nouvelles fonctionnalités: Icônes directionnelles, Suivi temps réel zone rouge, Navires non conformes');
+            console.log('🎯 Nouvelles fonctionnalités: Numérotation persistante, Coordonnées verrouillées, Panneau sidebar');
+            console.log(`📋 ${naviresNumerotes.size} navires déjà numérotés restaurés depuis localStorage`);
         });
     </script>
 </body>
