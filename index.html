@@ -30,7 +30,7 @@
             <div class="form-group">
                 <div>
                     <label for="token">🔑 Token Foil in Paris</label>
-                    <input type="text" id="token" placeholder="Votre token d'accès EuRIS">
+                    <input type="text" id="token" placeholder="Votre token d'accès Foil in Paris">
                 </div>
                 <div>
                     <label for="rayon">📏 Rayon (km)</label>
@@ -1025,7 +1025,7 @@
 
         // Récupération optimisée des navires
         async function recupererNavires(modeCible = false) {
-            console.log('🔄 Récupération des navires depuis EuRIS...', modeCible ? '(Mode ciblé)' : '');
+            console.log('🔄 Récupération des navires depuis', modeCible ? '(Mode ciblé)' : '');
             
             const token = document.getElementById('token').value;
             const rayon = parseFloat(document.getElementById('rayon').value);
@@ -1131,7 +1131,7 @@
         async function mettreAJourDonnees() {
             try {
                 console.log('🔄 Début de la mise à jour des données');
-                afficherStatut('connecting', 'Connexion à l\'API EuRIS...');
+                afficherStatut('connecting', 'Connexion à l\'API ...');
                 
                 // Utiliser le mode ciblé si on est en mode alerte
                 const modeCible = modeActualisation === 'alerte';
@@ -1201,7 +1201,7 @@
                             messageErreur = 'Accès interdit - permissions insuffisantes';
                             break;
                         case 404:
-                            messageErreur = 'Service EuRIS non trouvé';
+                            messageErreur = 'Service non trouvé';
                             break;
                         case 429:
                             messageErreur = 'Trop de requêtes - attendez avant de réessayer';
@@ -1210,7 +1210,7 @@
                         case 502:
                         case 503:
                         case 504:
-                            messageErreur = 'Service EuRIS temporairement indisponible';
+                            messageErreur = 'Service temporairement indisponible';
                             break;
                     }
                 }
@@ -1286,7 +1286,7 @@
             
             const token = document.getElementById('token').value.trim();
             if (!token) {
-                alert('Veuillez saisir votre token API EuRIS');
+                alert('Veuillez saisir votre token API');
                 return;
             }
             
@@ -1324,7 +1324,7 @@
                 
                 let messageErreur = error.message;
                 if (error.status === 401) {
-                    messageErreur = 'Token invalide. Vérifiez votre token API EuRIS.';
+                    messageErreur = 'Token invalide. Vérifiez votre token API.';
                 } else if (error.status === 403) {
                     messageErreur = 'Accès refusé. Vérifiez les permissions de votre token.';
                 }
