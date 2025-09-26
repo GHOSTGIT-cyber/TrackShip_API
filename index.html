@@ -215,14 +215,48 @@
             }
         }
 
-        // Nettoyage RGPD - Supprime les navires hors zone verte
+        // Nettoyage RGPD - Conservation des numéros pour navires dans la zone (même à l'arrêt)
         function nettoyageRGPD(naviresPresentsDansZoneVerte) {
-            const mmsiPresents = new Set(naviresPresentsDansZoneVerte.map(n => n.mmsi?.toString()).filter(Boolean));
+            const rayonSaisi = parseFloat(document.getElementById('rayon').value) || 3;
+            let rayonZoneVerte = ZONES_BASE.APPROCHE;
+            if (rayonSaisi > 3) {
+                rayonZoneVerte = ZONES_BASE.APPROCHE * (rayonSaisi / 3);
+            }
+
+            // MMSI des navires qui doivent garder leur numéro
+            const mmsiAGarder = new Set();
+            
+            // Parcourir tous les navires présents
+            naviresPresentsDansZoneVerte.forEach(navire => {
+                const mmsi = navire.mmsi?.toString();
+                if (!mmsi) return;
+                
+                const distance = calculerDistance(
+                    coordsActuelles.lat, coordsActuelles.lon,
+                    navire.latitude, navire.longitude
+                );
+                
+                // RÈGLE : Garder le numéro si le navire est DANS LA ZONE (peu importe s'il bouge ou pas)
+                const dansZoneVerte = distance <= rayonZoneVerte;
+                const estNonConformeEnMouvement = estNavireNonConformeEnMouvement(navire);
+                
+                if (dansZoneVerte || estNonConformeEnMouvement) {
+                    mmsiAGarder.add(mmsi);
+                    
+                    // Mettre à jour le timestamp si le navire est en mouvement
+                    if (naviresNumerotes.has(mmsi) && estEnMouvement(navire)) {
+                        const data = naviresNumerotes.get(mmsi);
+                        data.dernierMouvement = new Date().toISOString();
+                        naviresNumerotes.set(mmsi, data);
+                    }
+                }
+            });
+            
             const mmsiEnMemoireSupprimee = [];
             
-            // Supprimer les navires qui ne sont plus dans la zone verte
+            // Supprimer les navires qui ont QUITTÉ LA ZONE
             naviresNumerotes.forEach((data, mmsi) => {
-                if (!mmsiPresents.has(mmsi)) {
+                if (!mmsiAGarder.has(mmsi)) {
                     naviresNumerotes.delete(mmsi);
                     mmsiEnMemoireSupprimee.push(mmsi);
                 }
@@ -233,7 +267,7 @@
             }
         }
 
-        // Attribution d'un numéro à un navire
+        // Attribution d'un numéro à un navire EN MOUVEMENT uniquement
         function attribuerNumero(navire) {
             // Vérifier si nouvelle journée
             const aujourdhui = new Date().toDateString();
@@ -243,6 +277,12 @@
 
             const mmsi = navire.mmsi?.toString();
             if (!mmsi) return null;
+
+            // NOUVEAU : Seuls les navires EN MOUVEMENT peuvent avoir/garder un numéro
+            const enMouvement = estEnMouvement(navire);
+            if (!enMouvement) {
+                return null; // Pas de numéro pour les navires à l'arrêt
+            }
 
             // Si le navire a déjà un numéro, le retourner
             if (naviresNumerotes.has(mmsi)) {
@@ -261,22 +301,86 @@
                 rayonZoneVerte = ZONES_BASE.APPROCHE * (rayonSaisi / 3);
             }
 
-            // Attribution du numéro seulement si dans la zone verte
-            if (distance <= rayonZoneVerte) {
+            // Attribution du numéro si dans la zone verte OU navire non conforme en mouvement
+            const dansZoneVerte = distance <= rayonZoneVerte;
+            const estNonConformeEnMouvement = estNavireNonConformeEnMouvement(navire);
+            
+            if (dansZoneVerte || estNonConformeEnMouvement) {
                 const nouveauNumero = prochainNumero;
                 naviresNumerotes.set(mmsi, {
                     numero: nouveauNumero,
-                    dateAttribution: new Date().toISOString()
-                    // Plus de données de géolocalisation stockées (RGPD)
+                    dateAttribution: new Date().toISOString(),
+                    dernierMouvement: new Date().toISOString() // Pour tracking
                 });
                 
                 prochainNumero++;
-                sauvegarderCompteur(); // Sauve seulement le compteur
-                console.log(`🏷️ Nouveau numéro attribué: #${nouveauNumero} à "${navire.shipName}" (${mmsi})`);
+                sauvegarderCompteur();
+                console.log(`🏷️ Nouveau numéro attribué: #${nouveauNumero} à "${navire.shipName}" (${mmsi}) - ${estNonConformeEnMouvement ? 'Non conforme' : 'Zone verte'}`);
                 return nouveauNumero;
             }
 
             return null;
+        }
+
+        // Numérotation initiale au démarrage - SEULEMENT navires EN MOUVEMENT, du plus loin au plus près
+        function numerotationInitiale(tousLesNavires) {
+            console.log('🎯 Numérotation initiale des navires EN MOUVEMENT présents');
+            
+            const rayonSaisi = parseFloat(document.getElementById('rayon').value) || 3;
+            let rayonZoneVerte = ZONES_BASE.APPROCHE;
+            if (rayonSaisi > 3) {
+                rayonZoneVerte = ZONES_BASE.APPROCHE * (rayonSaisi / 3);
+            }
+
+            // Identifier les navires EN MOUVEMENT à numéroter
+            const naviresANumeroter = tousLesNavires.filter(navire => {
+                if (!navire.mmsi) return false;
+                
+                // OBLIGATOIRE : doit être en mouvement
+                const enMouvement = estEnMouvement(navire);
+                if (!enMouvement) return false;
+                
+                const distance = calculerDistance(
+                    coordsActuelles.lat, coordsActuelles.lon,
+                    navire.latitude, navire.longitude
+                );
+                
+                const dansZoneVerte = distance <= rayonZoneVerte;
+                const estNonConformeEnMouvement = estNavireNonConformeEnMouvement(navire);
+                
+                return dansZoneVerte || estNonConformeEnMouvement;
+            });
+
+            // Trier par distance - DU PLUS LOIN AU PLUS PRÈS
+            const naviresTries = naviresANumeroter.sort((a, b) => {
+                const distA = calculerDistance(coordsActuelles.lat, coordsActuelles.lon, a.latitude, a.longitude);
+                const distB = calculerDistance(coordsActuelles.lat, coordsActuelles.lon, b.latitude, b.longitude);
+                return distB - distA; // Ordre décroissant = plus loin d'abord
+            });
+
+            // Attribution séquentielle
+            let compteurInitial = 0;
+            naviresTries.forEach(navire => {
+                const mmsi = navire.mmsi?.toString();
+                if (mmsi && !naviresNumerotes.has(mmsi)) {
+                    const numeroAttribue = prochainNumero;
+                    naviresNumerotes.set(mmsi, {
+                        numero: numeroAttribue,
+                        dateAttribution: new Date().toISOString(),
+                        dernierMouvement: new Date().toISOString()
+                    });
+                    prochainNumero++;
+                    compteurInitial++;
+                    
+                    const distance = Math.round(calculerDistance(coordsActuelles.lat, coordsActuelles.lon, navire.latitude, navire.longitude));
+                    console.log(`🏷️ #${numeroAttribue} → "${navire.shipName}" (${distance}m) - EN MOUVEMENT`);
+                }
+            });
+            
+            if (compteurInitial > 0) {
+                sauvegarderCompteur();
+                console.log(`✅ ${compteurInitial} navires EN MOUVEMENT numérotés au démarrage (du plus loin au plus près)`);
+            }
         }
 
         // Récupération du numéro d'un navire
@@ -288,14 +392,13 @@
 
         console.log('🚢 TrackShip chargé sur trackship.bakabi.fr - Version avec numérotation persistante');
 
-        // Fonction pour créer une icône directionnelle avec numéro
+        // Fonction pour créer une icône directionnelle avec numéro (SEULEMENT si en mouvement)
         function creerIconeDirectionnelle(navire, analyse) {
             const enMouvement = estEnMouvement(navire);
             const course = parseFloat(navire.course) || 0;
             
-            // CORRECTION : D'abord attribuer, puis récupérer le numéro
-            attribuerNumero(navire); // Attribution si nécessaire
-            const numeroNavire = obtenirNumeroNavire(navire); // Récupération
+            // NOUVEAU : Le numéro ne s'affiche QUE si le navire est en mouvement
+            const numeroNavire = enMouvement ? obtenirNumeroNavire(navire) : null;
             
             // Couleur selon le statut
             let couleur = analyse.couleur;
@@ -357,8 +460,8 @@
                 `;
             }
 
-            // Ajout du numéro si attribué
-            if (numeroNavire) {
+            // Ajout du numéro SEULEMENT si en mouvement ET a un numéro
+            if (numeroNavire && enMouvement) {
                 iconeHtml += `
                     <div style="
                         position: absolute;
@@ -382,7 +485,7 @@
             
             // Ajout de l'emoji d'alerte si nécessaire
             if (analyse.emoji) {
-                iconeHtml += `<span style="position: absolute; top: ${numeroNavire ? '-12px' : '-8px'}; left: -8px; font-size: 16px; z-index: 1000;">${analyse.emoji}</span>`;
+                iconeHtml += `<span style="position: absolute; top: ${(numeroNavire && enMouvement) ? '-12px' : '-8px'}; left: -8px; font-size: 16px; z-index: 1000;">${analyse.emoji}</span>`;
             }
 
             return L.divIcon({
@@ -1338,7 +1441,7 @@
                 btn.textContent = '⏹️ Arrêter la surveillance';
                 btn.disabled = true;
                 
-                await mettreAJourDonnees();
+                await mettreAJourDonnees(true); // Première demande avec numérotation initiale
                 
                 surveillanceActive = true;
                 btn.disabled = false;
