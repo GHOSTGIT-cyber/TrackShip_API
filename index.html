@@ -276,17 +276,23 @@
             }
 
             const mmsi = navire.mmsi?.toString();
-            if (!mmsi) return null;
+            if (!mmsi) {
+                console.log(`⚠️ Pas de MMSI pour ${navire.shipName}`);
+                return null;
+            }
 
             // NOUVEAU : Seuls les navires EN MOUVEMENT peuvent avoir/garder un numéro
             const enMouvement = estEnMouvement(navire);
             if (!enMouvement) {
+                console.log(`⏸️ ${navire.shipName} à l'arrêt (vitesse: ${navire.speed}) - pas de nouveau numéro`);
                 return null; // Pas de numéro pour les navires à l'arrêt
             }
 
             // Si le navire a déjà un numéro, le retourner
             if (naviresNumerotes.has(mmsi)) {
-                return naviresNumerotes.get(mmsi).numero;
+                const numero = naviresNumerotes.get(mmsi).numero;
+                console.log(`♻️ ${navire.shipName} récupère son numéro #${numero}`);
+                return numero;
             }
 
             // Vérifier si le navire est dans la zone verte (zone d'approche)
@@ -305,6 +311,8 @@
             const dansZoneVerte = distance <= rayonZoneVerte;
             const estNonConformeEnMouvement = estNavireNonConformeEnMouvement(navire);
             
+            console.log(`🔍 ${navire.shipName} - Distance: ${Math.round(distance)}m - Zone: ${Math.round(rayonZoneVerte)}m - Dans zone: ${dansZoneVerte} - Non conforme: ${estNonConformeEnMouvement}`);
+            
             if (dansZoneVerte || estNonConformeEnMouvement) {
                 const nouveauNumero = prochainNumero;
                 naviresNumerotes.set(mmsi, {
@@ -315,8 +323,10 @@
                 
                 prochainNumero++;
                 sauvegarderCompteur();
-                console.log(`🏷️ Nouveau numéro attribué: #${nouveauNumero} à "${navire.shipName}" (${mmsi}) - ${estNonConformeEnMouvement ? 'Non conforme' : 'Zone verte'}`);
+                console.log(`🏷️ ✅ Nouveau numéro attribué: #${nouveauNumero} à "${navire.shipName}" (${mmsi}) - ${estNonConformeEnMouvement ? 'Non conforme' : 'Zone verte'}`);
                 return nouveauNumero;
+            } else {
+                console.log(`❌ ${navire.shipName} hors zone d'attribution (${Math.round(distance)}m > ${Math.round(rayonZoneVerte)}m)`);
             }
 
             return null;
@@ -643,10 +653,17 @@
             return R * c;
         }
 
-        // Vérification si navire en mouvement
+        // Vérification si navire en mouvement (DEBUG amélioré)
         function estEnMouvement(navire) {
             const vitesse = parseFloat(navire.speed) || 0;
-            return vitesse > 0.5;
+            const enMouvement = vitesse > 0.5;
+            
+            // DEBUG : Log détaillé
+            if (navire.shipName) {
+                console.log(`🚢 ${navire.shipName} - Vitesse brute: "${navire.speed}" - Vitesse parsée: ${vitesse} - En mouvement: ${enMouvement}`);
+            }
+            
+            return enMouvement;
         }
 
         // Vérification si navire conforme aux critères d'affichage
@@ -906,13 +923,21 @@
             naviresAfficher.forEach(navire => {
                 const analyse = analyserNavire(navire);
                 const enMouvement = estEnMouvement(navire);
-                const numeroNavire = obtenirNumeroNavire(navire);
                 
-                // Utilisation de l'icône directionnelle améliorée avec numéro
+                // DEBUG: Logs pour comprendre le problème
+                console.log(`🚢 ${navire.shipName || 'Inconnu'} - Vitesse: ${navire.speed} - En mouvement: ${enMouvement}`);
+                
+                // NOUVELLE LOGIQUE : Attribution directe ici si navire en mouvement
+                if (enMouvement) {
+                    attribuerNumero(navire);
+                }
+                
+                // Utilisation de l'icône directionnelle améliorée
                 const iconeNavire = creerIconeDirectionnelle(navire, analyse);
 
                 const cap = navire.course ? `${Math.round(navire.course)}°` : 'N/A';
-                const numeroText = numeroNavire ? `#${numeroNavire}` : 'Non numéroté';
+                const numeroNavire = obtenirNumeroNavire(navire);
+                const numeroText = numeroNavire && enMouvement ? `#${numeroNavire}` : (numeroNavire ? `#${numeroNavire} (caché)` : 'Non numéroté');
                 
                 const popupContent = `
                     <div style="min-width: 220px;">
@@ -943,6 +968,8 @@
                 markers.push(marker);
             });
 
+            // DEBUG: Résumé des numéros attribués
+            console.log(`🏷️ Numéros en mémoire:`, Array.from(naviresNumerotes.entries()));
             console.log(`✅ ${markers.length} marqueurs ajoutés`);
         }
 
@@ -978,7 +1005,7 @@
                 const estTracke = naviresTrackes.has(navire.mmsi?.toString());
                 const cap = navire.course ? `${Math.round(navire.course)}°` : 'N/A';
                 const numeroNavire = obtenirNumeroNavire(navire);
-                const numeroText = numeroNavire ? `#${numeroNavire}` : '';
+                const numeroText = numeroNavire && enMouvement ? `#${numeroNavire}` : '';
                 
                 return `
                     <div class="navire-item ${analyse.classeCSS}" onclick="centrerSurNavire(${navire.latitude}, ${navire.longitude})">
@@ -987,6 +1014,7 @@
                                 🚢 ${numeroText} ${navire.shipName || 'Navire inconnu'} ${analyse.emoji}
                                 ${enMouvement ? '🔄' : '⏸️'}
                                 ${estTracke ? '🎯' : ''}
+                                ${numeroNavire && !enMouvement ? ' (numéro caché - à l\'arrêt)' : ''}
                             </span>
                             <span class="navire-distance ${analyse.classeDistance}">
                                 ${analyse.distance}m
@@ -995,7 +1023,7 @@
                         <div class="navire-details">
                             <div class="navire-detail">
                                 <span>Numéro:</span>
-                                <strong>${numeroText || 'Non attribué'}</strong>
+                                <strong>${numeroNavire ? `#${numeroNavire}${!enMouvement ? ' (caché)' : ''}` : 'Non attribué'}</strong>
                             </div>
                             <div class="navire-detail">
                                 <span>Vitesse:</span>
