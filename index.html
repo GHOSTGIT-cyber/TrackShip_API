@@ -23,7 +23,7 @@
     <div class="container">
         <div class="header">
             <h1>🛰️ Surveillance des navires en mouvement (Seine)</h1>
-            <p> • surveillance automatique avec alertes de proximité • Suivi temps réel zone rouge • Numérotation persistante</p>
+            <p> • surveillance automatique avec alertes de proximité • Suivi temps réel zone rouge • </p>
         </div>
 
         <div class="controls">
@@ -915,51 +915,31 @@
         function mettreAJourMarqueurs() {
             console.log('🗺️ Mise à jour des marqueurs');
             
-            markers.forEach(marker => map.removeLayer(marker));
+            markers.forEach(function(marker) {
+                map.removeLayer(marker);
+            });
             markers = [];
 
             const naviresAfficher = filtrerNavires(navires);
 
-            naviresAfficher.forEach(navire => {
+            naviresAfficher.forEach(function(navire) {
                 const analyse = analyserNavire(navire);
                 const enMouvement = estEnMouvement(navire);
+                const numeroNavire = obtenirNumeroNavire(navire);
                 
-                // DEBUG: Logs pour comprendre le problème
-                console.log(`🚢 ${navire.shipName || 'Inconnu'} - Vitesse: ${navire.speed} - En mouvement: ${enMouvement}`);
-                
-                // NOUVELLE LOGIQUE : Attribution directe ici si navire en mouvement
-                if (enMouvement) {
-                    attribuerNumero(navire);
-                }
-                
-                // Utilisation de l'icône directionnelle améliorée
+                // Utiliser la fonction creerIconeDirectionnelle qui existe déjà
                 const iconeNavire = creerIconeDirectionnelle(navire, analyse);
 
-                const cap = navire.course ? `${Math.round(navire.course)}°` : 'N/A';
-                const numeroNavire = obtenirNumeroNavire(navire);
-                const numeroText = numeroNavire && enMouvement ? `#${numeroNavire}` : (numeroNavire ? `#${numeroNavire} (caché)` : 'Non numéroté');
+                const statutTexte = enMouvement ? 'EN MOUVEMENT' : 'À L\'ARRÊT';
+                const nomNavire = navire.shipName || 'Navire inconnu';
+                const vitesse = navire.speed || 'N/A';
+                const longueur = navire.length || 'N/A';
+                const mmsi = navire.mmsi || 'N/A';
+                const typeNavire = navire.shipType || 'N/A';
+                const cap = navire.course ? Math.round(navire.course) + '°' : 'N/A';
+                const numeroText = numeroNavire && enMouvement ? '#' + numeroNavire : '';
                 
-                const popupContent = `
-                    <div style="min-width: 220px;">
-                        <h4 style="margin: 0 0 10px 0; color: ${analyse.couleur};">
-                            🚢 ${navire.shipName || 'Navire inconnu'} ${analyse.emoji}
-                        </h4>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 12px;">
-                            <div><strong>Numéro:</strong> ${numeroText}</div>
-                            <div><strong>Vitesse:</strong> ${navire.speed || 'N/A'} kn</div>
-                            <div><strong>Cap:</strong> ${cap}</div>
-                            <div><strong>Longueur:</strong> ${navire.length || 'N/A'} m</div>
-                            <div><strong>MMSI:</strong> ${navire.mmsi || 'N/A'}</div>
-                            <div><strong>Type:</strong> ${navire.shipType || 'N/A'}</div>
-                            <div><strong>Distance:</strong> ${analyse.distance}m</div>
-                            <div style="grid-column: 1 / -1;"><strong>Statut:</strong> <span style="color: ${analyse.couleur}; font-weight: bold;">${enMouvement ? 'EN MOUVEMENT' : 'À L\'ARRÊT'}</span></div>
-                        </div>
-                        <div style="margin-top: 8px; font-size: 11px; color: #666;">
-                            📍 ${navire.latitude?.toFixed(6)}, ${navire.longitude?.toFixed(6)}
-                        </div>
-                        ${naviresTrackes.has(navire.mmsi?.toString()) ? '<div style="margin-top: 5px; color: #dc3545; font-weight: bold; font-size: 11px;">🎯 TRACKÉ EN TEMPS RÉEL</div>' : ''}
-                    </div>
-                `;
+                const popupContent = '<div style="min-width: 200px;"><h4 style="margin: 0 0 10px 0; color: ' + analyse.couleur + ';">' + numeroText + (numeroText ? ' - ' : '') + '🚢 ' + nomNavire + ' ' + analyse.emoji + '</h4><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 12px;"><div><strong>Vitesse:</strong> ' + vitesse + ' kn</div><div><strong>Cap:</strong> ' + cap + '</div><div><strong>Longueur:</strong> ' + longueur + ' m</div><div><strong>MMSI:</strong> ' + mmsi + '</div><div><strong>Type:</strong> ' + typeNavire + '</div><div><strong>Distance:</strong> ' + analyse.distance + 'm</div><div><strong>Statut:</strong> <span style="color: ' + analyse.couleur + '; font-weight: bold;">' + statutTexte + '</span></div></div><div style="margin-top: 8px; font-size: 11px; color: #666;">📍 ' + navire.latitude.toFixed(6) + ', ' + navire.longitude.toFixed(6) + '</div></div>';
 
                 const marker = L.marker([navire.latitude, navire.longitude], {icon: iconeNavire})
                     .addTo(map)
@@ -968,11 +948,8 @@
                 markers.push(marker);
             });
 
-            // DEBUG: Résumé des numéros attribués
-            console.log(`🏷️ Numéros en mémoire:`, Array.from(naviresNumerotes.entries()));
-            console.log(`✅ ${markers.length} marqueurs ajoutés`);
+            console.log('✅ ' + markers.length + ' marqueurs ajoutés');
         }
-
         // Mise à jour de la liste des navires conformes
         function mettreAJourListeNavires() {
             console.log('📋 Mise à jour de la liste des navires');
