@@ -22,7 +22,7 @@
 
     <div class="container">
         <div class="header">
-            <h1>🛰️ Surveillance des navires en mouvement (Seine)</h1>
+            <h1>🛰️ Surveillance des navires en mouvement Foil in Paris</h1>
             <p> • surveillance automatique avec alertes de proximité • Suivi temps réel zone rouge • </p>
         </div>
 
@@ -1280,6 +1280,20 @@
                 
                 // Tous les navires sont affichés (comme avant)
                 navires = tousLesNavires;
+
+                // Numérotation au premier scan ou attribution de nouveaux numéros
+                if (naviresNumerotes.size === 0) {
+                    console.log('🎯 Premier scan : numérotation initiale');
+                    numerotationInitiale(navires);
+                } else {
+                    console.log('🔄 Scan suivant : attribution nouveaux + nettoyage');
+                    navires.forEach(navire => {
+                        if (estEnMouvement(navire)) {
+                            attribuerNumero(navire);
+                        }
+                    });
+                    nettoyageRGPD(navires);
+                }
                 
                 // Optionnel : identifier les navires avec des données manquantes qui peuvent bouger
                 naviresNonConformes = tousLesNavires.filter(navire => {
