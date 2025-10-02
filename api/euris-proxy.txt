@@ -1,6 +1,6 @@
 <?php
 // api/euris-proxy.php
-// Backend adapté pour trackship.bakabi.fr avec trackID
+// Remplace /.netlify/functions/euris-proxy pour trackship.bakabi.fr
 
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
@@ -107,100 +107,41 @@ if (json_last_error() !== JSON_ERROR_NONE) {
     ]));
 }
 
-// L'API retourne directement un tableau
+// Normalisation des données (comme dans la fonction Netlify)
 $tracks = [];
-if (is_array($data)) {
+if (isset($data['tracks']) && is_array($data['tracks'])) {
+    $tracks = $data['tracks'];
+} elseif (is_array($data)) {
     $tracks = $data;
+} elseif (isset($data['data']) && is_array($data['data'])) {
+    $tracks = $data['data'];
 }
 
-// Normalisation des propriétés en utilisant les vrais champs de l'API
+// Normalisation des propriétés
 $tracksNormalisees = array_map(function($track) {
-    // Extraction des coordonnées
-    $lat = isset($track['lat']) ? floatval($track['lat']) : null;
-    $lon = isset($track['lon']) ? floatval($track['lon']) : null;
-    
-    // Utilisation de trackID comme identifiant principal
-    $trackId = $track['trackID'] ?? null;
-    
-    // Statut de mouvement basé sur le champ "moving"
-    $enMouvement = isset($track['moving']) ? $track['moving'] : null;
-    
-    // Vitesse (SOG = Speed Over Ground)
-    $vitesse = isset($track['sog']) ? floatval($track['sog']) : null;
-    
-    // Cap (COG = Course Over Ground)
-    $cap = isset($track['cog']) ? floatval($track['cog']) : null;
-    
-    // Dimensions
-    $longueur = isset($track['inlen']) ? floatval($track['inlen']) : null;
-    $largeur = isset($track['inbm']) ? floatval($track['inbm']) : null;
-    
-    // Position fluviale
-    $positionISRS = $track['positionISRS'] ?? null;
-    $positionName = $track['positionISRSName'] ?? null;
-    
-    // Statut (st: 1 = en mouvement, 2 = à l'arrêt)
-    $statut = isset($track['st']) ? intval($track['st']) : null;
-    
     return [
-        // Identifiants
-        'trackId' => $trackId,
-        'mmsi' => $trackId, // On utilise trackID comme MMSI pour compatibilité frontend
-        'name' => $track['name'] ?? "Track $trackId",
-        'shipName' => $track['name'] ?? "Track $trackId",
-        
-        // Position
-        'latitude' => $lat,
-        'longitude' => $lon,
-        'positionISRS' => $positionISRS,
-        'positionName' => $positionName,
-        
-        // Mouvement
-        'speed' => $vitesse,
-        'course' => $cap,
-        'moving' => $enMouvement,
-        'status' => $statut,
-        
-        // Dimensions
-        'length' => $longueur,
-        'width' => $largeur,
-        
-        // Dimensions détaillées
-        'dimA' => isset($track['dimA']) ? intval($track['dimA']) : null,
-        'dimB' => isset($track['dimB']) ? intval($track['dimB']) : null,
-        'dimC' => isset($track['dimC']) ? intval($track['dimC']) : null,
-        'dimD' => isset($track['dimD']) ? intval($track['dimD']) : null,
-        
-        // Type de navire (non fourni par l'API)
-        'shipType' => 'Navire fluvial',
-        
-        // Timestamp
-        'timestamp' => $track['posTS'] ?? null,
-        
-        // Données originales pour debug
+        'latitude' => $track['latitude'] ?? $track['lat'] ?? null,
+        'longitude' => $track['longitude'] ?? $track['lon'] ?? null,
+        'mmsi' => $track['mmsi'] ?? $track['MMSI'] ?? $track['id'] ?? null,
+        'shipName' => $track['shipName'] ?? $track['name'] ?? null,
+        'shipType' => $track['shipType'] ?? $track['type'] ?? null,
+        'speed' => $track['speed'] ?? $track['sog'] ?? null,
+        'course' => $track['course'] ?? $track['cog'] ?? null,
+        'length' => $track['length'] ?? null,
+        'width' => $track['width'] ?? null,
+        'status' => $track['status'] ?? null,
+        'timestamp' => $track['timestamp'] ?? null,
         '_original' => $track
     ];
 }, $tracks);
 
-// Filtrage des navires avec coordonnées valides
-$tracksValides = array_filter($tracksNormalisees, function($track) {
-    return $track['latitude'] !== null && 
-           $track['longitude'] !== null &&
-           $track['trackId'] !== null;
-});
-
-// Réindexation du tableau
-$tracksValides = array_values($tracksValides);
-
 // Réponse finale
 echo json_encode([
-    'tracks' => $tracksValides,
+    'tracks' => $tracksNormalisees,
     '_metadata' => [
         'timestamp' => date('c'),
         'source' => 'EuRIS API via trackship.bakabi.fr',
-        'trackCount' => count($tracksValides),
-        'totalReceived' => count($tracks),
-        'validTracks' => count($tracksValides)
+        'trackCount' => count($tracksNormalisees)
     ]
 ]);
 ?>
