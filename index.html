@@ -151,12 +151,12 @@
         let intervalleCompteur;
         let tempsRestant = REFRESH_NORMAL;
         let naviresEnAlerte = new Set();
-        let naviresTrackes = new Map(); // trackId -> données de tracking
+        let naviresTrackes = new Map(); // MMSI -> données de tracking
         let coordsActuelles = {...BASE_COORDS};
         let modeActualisation = 'normal'; // 'normal' ou 'alerte'
 
         // ===== SYSTÈME DE NUMÉROTATION CONFORME RGPD =====
-        let naviresNumerotes = new Map(); // trackId -> {numero, dateAttribution}
+        let naviresNumerotes = new Map(); // MMSI -> {numero, dateAttribution}
         let prochainNumero = 1;
         let derniereReinitialisation = null;
 
@@ -223,13 +223,13 @@
                 rayonZoneVerte = ZONES_BASE.APPROCHE * (rayonSaisi / 3);
             }
 
-            // trackId des navires qui doivent garder leur numéro
-            const trackIdsAGarder = new Set();
+            // MMSI des navires qui doivent garder leur numéro
+            const mmsiAGarder = new Set();
             
             // Parcourir tous les navires présents
             naviresPresentsDansZoneVerte.forEach(navire => {
-                const trackId = navire.trackId?.toString();
-                if (!trackId) return;
+                const mmsi = navire.mmsi?.toString();
+                if (!mmsi) return;
                 
                 const distance = calculerDistance(
                     coordsActuelles.lat, coordsActuelles.lon,
@@ -241,29 +241,29 @@
                 const estNonConformeEnMouvement = estNavireNonConformeEnMouvement(navire);
                 
                 if (dansZoneVerte || estNonConformeEnMouvement) {
-                    trackIdsAGarder.add(trackId);
+                    mmsiAGarder.add(mmsi);
                     
                     // Mettre à jour le timestamp si le navire est en mouvement
-                    if (naviresNumerotes.has(trackId) && estEnMouvement(navire)) {
-                        const data = naviresNumerotes.get(trackId);
+                    if (naviresNumerotes.has(mmsi) && estEnMouvement(navire)) {
+                        const data = naviresNumerotes.get(mmsi);
                         data.dernierMouvement = new Date().toISOString();
-                        naviresNumerotes.set(trackId, data);
+                        naviresNumerotes.set(mmsi, data);
                     }
                 }
             });
             
-            const trackIdsEnMemoireSupprimee = [];
+            const mmsiEnMemoireSupprimee = [];
             
             // Supprimer les navires qui ont QUITTÉ LA ZONE
-            naviresNumerotes.forEach((data, trackId) => {
-                if (!trackIdsAGarder.has(trackId)) {
-                    naviresNumerotes.delete(trackId);
-                    trackIdsEnMemoireSupprimee.push(trackId);
+            naviresNumerotes.forEach((data, mmsi) => {
+                if (!mmsiAGarder.has(mmsi)) {
+                    naviresNumerotes.delete(mmsi);
+                    mmsiEnMemoireSupprimee.push(mmsi);
                 }
             });
             
-            if (trackIdsEnMemoireSupprimee.length > 0) {
-                console.log(`🗑️ RGPD: ${trackIdsEnMemoireSupprimee.length} navire(s) oublié(s) (sortis de zone)`);
+            if (mmsiEnMemoireSupprimee.length > 0) {
+                console.log(`🗑️ RGPD: ${mmsiEnMemoireSupprimee.length} navire(s) oublié(s) (sortis de zone)`);
             }
         }
 
@@ -275,9 +275,9 @@
                 reinitialiserNumerotation();
             }
 
-            const trackId = navire.trackId?.toString();
-            if (!trackId) {
-                console.log(`⚠️ Pas de trackId pour ${navire.shipName}`);
+            const mmsi = navire.mmsi?.toString();
+            if (!mmsi) {
+                console.log(`⚠️ Pas de MMSI pour ${navire.shipName}`);
                 return null;
             }
 
@@ -289,8 +289,8 @@
             }
 
             // Si le navire a déjà un numéro, le retourner
-            if (naviresNumerotes.has(trackId)) {
-                const numero = naviresNumerotes.get(trackId).numero;
+            if (naviresNumerotes.has(mmsi)) {
+                const numero = naviresNumerotes.get(mmsi).numero;
                 console.log(`♻️ ${navire.shipName} récupère son numéro #${numero}`);
                 return numero;
             }
@@ -315,7 +315,7 @@
             
             if (dansZoneVerte || estNonConformeEnMouvement) {
                 const nouveauNumero = prochainNumero;
-                naviresNumerotes.set(trackId, {
+                naviresNumerotes.set(mmsi, {
                     numero: nouveauNumero,
                     dateAttribution: new Date().toISOString(),
                     dernierMouvement: new Date().toISOString() // Pour tracking
@@ -323,7 +323,7 @@
                 
                 prochainNumero++;
                 sauvegarderCompteur();
-                console.log(`🏷️ ✅ Nouveau numéro attribué: #${nouveauNumero} à "${navire.shipName}" (${trackId}) - ${estNonConformeEnMouvement ? 'Non conforme' : 'Zone verte'}`);
+                console.log(`🏷️ ✅ Nouveau numéro attribué: #${nouveauNumero} à "${navire.shipName}" (${mmsi}) - ${estNonConformeEnMouvement ? 'Non conforme' : 'Zone verte'}`);
                 return nouveauNumero;
             } else {
                 console.log(`❌ ${navire.shipName} hors zone d'attribution (${Math.round(distance)}m > ${Math.round(rayonZoneVerte)}m)`);
@@ -344,7 +344,7 @@
 
             // Identifier les navires EN MOUVEMENT à numéroter
             const naviresANumeroter = tousLesNavires.filter(navire => {
-                if (!navire.trackId) return false;
+                if (!navire.mmsi) return false;
                 
                 // OBLIGATOIRE : doit être en mouvement
                 const enMouvement = estEnMouvement(navire);
@@ -371,10 +371,10 @@
             // Attribution séquentielle
             let compteurInitial = 0;
             naviresTries.forEach(navire => {
-                const trackId = navire.trackId?.toString();
-                if (mmsi && !naviresNumerotes.has(trackId)) {
+                const mmsi = navire.mmsi?.toString();
+                if (mmsi && !naviresNumerotes.has(mmsi)) {
                     const numeroAttribue = prochainNumero;
-                    naviresNumerotes.set(trackId, {
+                    naviresNumerotes.set(mmsi, {
                         numero: numeroAttribue,
                         dateAttribution: new Date().toISOString(),
                         dernierMouvement: new Date().toISOString()
@@ -395,9 +395,9 @@
 
         // Récupération du numéro d'un navire
         function obtenirNumeroNavire(navire) {
-            const trackId = navire.trackId?.toString();
-            if (!mmsi || !naviresNumerotes.has(trackId)) return null;
-            return naviresNumerotes.get(trackId).numero;
+            const mmsi = navire.mmsi?.toString();
+            if (!mmsi || !naviresNumerotes.has(mmsi)) return null;
+            return naviresNumerotes.get(mmsi).numero;
         }
 
         console.log('🚢 TrackShip chargé sur trackship.bakabi.fr - Version avec numérotation persistante');
@@ -672,10 +672,10 @@
             const aVitesse = navire.speed !== null && navire.speed !== undefined;
             const aNom = navire.shipName && navire.shipName.trim() !== '';
             const aLongueur = navire.length && parseFloat(navire.length) > 0;
-            const aTrack ID = navire.trackId && navire.trackId.toString().length >= 6;
+            const aMMSI = navire.mmsi && navire.mmsi.toString().length >= 6;
             
-            // Un navire est conforme s'il a au moins un nom et un Track ID valide
-            return aNom && aTrack ID;
+            // Un navire est conforme s'il a au moins un nom et un MMSI valide
+            return aNom && aMMSI;
         }
 
         // Vérification si navire non conforme peut être en mouvement
@@ -683,13 +683,13 @@
             // Doit avoir une vitesse ET être en mouvement (> 0.5 kn)
             const aVitesse = navire.speed !== null && navire.speed !== undefined && parseFloat(navire.speed) > 0.5;
             
-            // Manque au moins une donnée critique (nom, Track ID ou longueur)
+            // Manque au moins une donnée critique (nom, MMSI ou longueur)
             const manqueNom = !navire.shipName || navire.shipName.trim() === '';
-            const manqueTrack ID = !navire.trackId || navire.trackId.toString().length < 6;
+            const manqueMMSI = !navire.mmsi || navire.mmsi.toString().length < 6;
             const manqueLongueur = !navire.length || parseFloat(navire.length) <= 0;
             
             // Non conforme = manque des données ET peut bouger (a une vitesse > 0)
-            return aVitesse && (manqueNom || manqueTrack ID || manqueLongueur);
+            return aVitesse && (manqueNom || manqueMMSI || manqueLongueur);
         }
 
         // Analyse du niveau de danger
@@ -743,7 +743,7 @@
         function gererTrackingZoneRouge() {
             const naviresAlerteEnMouvement = navires.filter(navire => {
                 const analyse = analyserNavire(navire);
-                return analyse.statut === 'alerte' && estEnMouvement(navire) && navire.trackId;
+                return analyse.statut === 'alerte' && estEnMouvement(navire) && navire.mmsi;
             });
 
             // Mise à jour de la liste de tracking
@@ -751,20 +751,20 @@
             const nouvellesClefs = new Set();
 
             naviresAlerteEnMouvement.forEach(navire => {
-                const trackId = navire.trackId.toString();
-                nouvellesClefs.add(trackId);
+                const mmsi = navire.mmsi.toString();
+                nouvellesClefs.add(mmsi);
                 
-                if (!naviresTrackes.has(trackId)) {
-                    naviresTrackes.set(trackId, {
+                if (!naviresTrackes.has(mmsi)) {
+                    naviresTrackes.set(mmsi, {
                         navire: navire,
                         debutTracking: Date.now(),
                         dernierePosition: {lat: navire.latitude, lon: navire.longitude},
                         historique: []
                     });
-                    console.log(`🎯 Début du tracking: ${navire.shipName} (${trackId})`);
+                    console.log(`🎯 Début du tracking: ${navire.shipName} (${mmsi})`);
                 } else {
                     // Mise à jour des données
-                    const tracking = naviresTrackes.get(trackId);
+                    const tracking = naviresTrackes.get(mmsi);
                     tracking.navire = navire;
                     tracking.historique.push({
                         timestamp: Date.now(),
@@ -779,10 +779,10 @@
 
             // Suppression des navires qui ne sont plus en zone rouge
             anciennesClefs.forEach(mmsi => {
-                if (!nouvellesClefs.has(trackId)) {
-                    const tracking = naviresTrackes.get(trackId);
-                    console.log(`⏹️ Fin du tracking: ${tracking.navire.shipName} (${trackId})`);
-                    naviresTrackes.delete(trackId);
+                if (!nouvellesClefs.has(mmsi)) {
+                    const tracking = naviresTrackes.get(mmsi);
+                    console.log(`⏹️ Fin du tracking: ${tracking.navire.shipName} (${mmsi})`);
+                    naviresTrackes.delete(mmsi);
                 }
             });
 
@@ -934,12 +934,12 @@
                 const nomNavire = navire.shipName || 'Navire inconnu';
                 const vitesse = navire.speed || 'N/A';
                 const longueur = navire.length || 'N/A';
-                const trackId = navire.trackId || 'N/A';
+                const mmsi = navire.mmsi || 'N/A';
                 const typeNavire = navire.shipType || 'N/A';
                 const cap = navire.course ? Math.round(navire.course) + '°' : 'N/A';
                 const numeroText = numeroNavire && enMouvement ? '#' + numeroNavire : '';
                 
-                const popupContent = '<div style="min-width: 200px;"><h4 style="margin: 0 0 10px 0; color: ' + analyse.couleur + ';">' + numeroText + (numeroText ? ' - ' : '') + '🚢 ' + nomNavire + ' ' + analyse.emoji + '</h4><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 12px;"><div><strong>Vitesse:</strong> ' + vitesse + ' kn</div><div><strong>Cap:</strong> ' + cap + '</div><div><strong>Longueur:</strong> ' + longueur + ' m</div><div><strong>Track ID:</strong> ' + mmsi + '</div><div><strong>Type:</strong> ' + typeNavire + '</div><div><strong>Distance:</strong> ' + analyse.distance + 'm</div><div><strong>Statut:</strong> <span style="color: ' + analyse.couleur + '; font-weight: bold;">' + statutTexte + '</span></div></div><div style="margin-top: 8px; font-size: 11px; color: #666;">📍 ' + navire.latitude.toFixed(6) + ', ' + navire.longitude.toFixed(6) + '</div></div>';
+                const popupContent = '<div style="min-width: 200px;"><h4 style="margin: 0 0 10px 0; color: ' + analyse.couleur + ';">' + numeroText + (numeroText ? ' - ' : '') + '🚢 ' + nomNavire + ' ' + analyse.emoji + '</h4><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 12px;"><div><strong>Vitesse:</strong> ' + vitesse + ' kn</div><div><strong>Cap:</strong> ' + cap + '</div><div><strong>Longueur:</strong> ' + longueur + ' m</div><div><strong>MMSI:</strong> ' + mmsi + '</div><div><strong>Type:</strong> ' + typeNavire + '</div><div><strong>Distance:</strong> ' + analyse.distance + 'm</div><div><strong>Statut:</strong> <span style="color: ' + analyse.couleur + '; font-weight: bold;">' + statutTexte + '</span></div></div><div style="margin-top: 8px; font-size: 11px; color: #666;">📍 ' + navire.latitude.toFixed(6) + ', ' + navire.longitude.toFixed(6) + '</div></div>';
 
                 const marker = L.marker([navire.latitude, navire.longitude], {icon: iconeNavire})
                     .addTo(map)
@@ -979,7 +979,7 @@
             const htmlNavires = naviresTries.map(navire => {
                 const analyse = analyserNavire(navire);
                 const enMouvement = estEnMouvement(navire);
-                const estTracke = naviresTrackes.has(navire.trackId?.toString());
+                const estTracke = naviresTrackes.has(navire.mmsi?.toString());
                 const cap = navire.course ? `${Math.round(navire.course)}°` : 'N/A';
                 const numeroNavire = obtenirNumeroNavire(navire);
                 const numeroText = numeroNavire && enMouvement ? `#${numeroNavire}` : '';
@@ -1015,8 +1015,8 @@
                                 <strong>${navire.length || 'N/A'} m</strong>
                             </div>
                             <div class="navire-detail">
-                                <span>Track ID:</span>
-                                <strong>${navire.trackId || 'N/A'}</strong>
+                                <span>MMSI:</span>
+                                <strong>${navire.mmsi || 'N/A'}</strong>
                             </div>
                             <div class="navire-detail">
                                 <span>Statut:</span>
@@ -1051,7 +1051,7 @@
                 
                 let raisonNonConforme = [];
                 if (!navire.shipName || navire.shipName.trim() === '') raisonNonConforme.push('Nom manquant');
-                if (!navire.trackId || navire.trackId.toString().length < 6) raisonNonConforme.push('Track ID invalide');
+                if (!navire.mmsi || navire.mmsi.toString().length < 6) raisonNonConforme.push('MMSI invalide');
                 if (!navire.length || parseFloat(navire.length) <= 0) raisonNonConforme.push('Longueur manquante');
                 if (!navire.speed && navire.speed !== 0) raisonNonConforme.push('Vitesse manquante');
                 
@@ -1075,8 +1075,8 @@
                                 <strong>${navire.speed || 'N/A'} kn</strong>
                             </div>
                             <div class="navire-detail">
-                                <span>Track ID:</span>
-                                <strong>${navire.trackId || 'N/A'}</strong>
+                                <span>MMSI:</span>
+                                <strong>${navire.mmsi || 'N/A'}</strong>
                             </div>
                             <div class="navire-detail">
                                 <span>Longueur:</span>
@@ -1148,9 +1148,9 @@
             // Bannière rouge : navires EN MOUVEMENT dans zone 1km
             if (naviresAlerteMouvement.length > 0) {
                 naviresAlerteMouvement.forEach(navire => {
-                    if (!naviresEnAlerte.has(navire.trackId)) {
+                    if (!naviresEnAlerte.has(navire.mmsi)) {
                         declencherAlerteRouge(navire);
-                        naviresEnAlerte.add(navire.trackId);
+                        naviresEnAlerte.add(navire.mmsi);
                     }
                 });
             }
@@ -1158,8 +1158,8 @@
             // Nettoyage des navires plus en alerte
             const mmsiActuels = new Set(naviresAlerteMouvement.map(n => n.mmsi));
             naviresEnAlerte.forEach(mmsi => {
-                if (!mmsiActuels.has(trackId)) {
-                    naviresEnAlerte.delete(trackId);
+                if (!mmsiActuels.has(mmsi)) {
+                    naviresEnAlerte.delete(mmsi);
                 }
             });
         }
