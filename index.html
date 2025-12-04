@@ -93,6 +93,16 @@
                     </div>
                 </div>
 
+                <!-- Compteur journalier de passages -->
+                <div id="panneauCompteurJournalier" class="compteur-journalier">
+                    <h3>📊 Compteur de passages - Zone Rouge</h3>
+                    <div class="compteur-jour-actuel">
+                        <div class="jour-label">Jour 1 (Aujourd'hui)</div>
+                        <div class="jour-compteur">0 passage</div>
+                    </div>
+                    <div class="compteur-historique"></div>
+                </div>
+
                 <!-- Panneau d'attention intégré dans la sidebar -->
                 <div id="panneauAttentionSidebar" class="panneau-attention-sidebar" style="display: none;">
                     <div class="panneau-titre">
@@ -160,6 +170,29 @@
         let prochainNumero = 1;
         let derniereReinitialisation = null;
 
+        // ===== STABILISATION NUMÉROTATION =====
+        let historiqueVitesses = new Map(); // MMSI -> {scans, scansMouvement, scansArret, dernierScan, derniereVitesse}
+        const SCANS_REQUIS_MOUVEMENT = 2; // 2 scans consécutifs > 0.5 kn pour attribution
+        const SCANS_DELAI_GRACE = 2; // 2 scans de tolérance avant retrait numéro
+
+        // ===== COMPTEUR JOURNALIER =====
+        let compteurJournalier = {
+            derniereReinitialisation: null,
+            joursHistorique: [],
+            jourActuel: null
+        };
+
+        // ===== DÉTECTION TERRE/EAU =====
+        const POLYGONE_SEINE_PARIS = [
+            [48.890, 2.210], // Amont Ouest
+            [48.885, 2.250], // Amont Est
+            [48.850, 2.280], // Centre Est
+            [48.820, 2.260], // Aval Est
+            [48.825, 2.200], // Aval Ouest
+            [48.860, 2.180], // Centre Ouest
+            [48.890, 2.210]  // Fermeture polygone
+        ];
+
         // Initialisation du système de numérotation
         function initialiserNumerotation() {
             const aujourdhui = new Date().toDateString();
@@ -190,6 +223,9 @@
             // IMPORTANT: Les navires ne sont jamais sauvegardés, seul le compteur l'est
             naviresNumerotes.clear();
             console.log('🗑️ Mémoire des navires vidée (conforme RGPD)');
+
+            // Initialiser le compteur journalier
+            initialiserCompteurJournalier();
         }
 
         // Réinitialisation du compteur pour une nouvelle journée
@@ -213,6 +249,172 @@
             } catch (e) {
                 console.warn('⚠️ Erreur lors de la sauvegarde du compteur:', e);
             }
+        }
+
+        // ===== SYSTÈME COMPTEUR JOURNALIER =====
+
+        function initialiserCompteurJournalier() {
+            const aujourdhui = new Date().toDateString();
+
+            const donneesStockees = localStorage.getItem('trackship_compteur_quotidien');
+            if (donneesStockees) {
+                try {
+                    const donnees = JSON.parse(donneesStockees);
+
+                    if (donnees.jourActuel && donnees.jourActuel.date === aujourdhui) {
+                        // Même jour, restaurer
+                        compteurJournalier = donnees;
+                        console.log(`📊 Compteur journalier restauré: Jour ${compteurJournalier.jourActuel.numeroJour}, ${compteurJournalier.jourActuel.compteur} passages`);
+                    } else {
+                        // Nouveau jour détecté
+                        if (donnees.jourActuel) {
+                            // Archiver le jour précédent
+                            donnees.joursHistorique = donnees.joursHistorique || [];
+                            donnees.joursHistorique.push({
+                                numeroJour: donnees.jourActuel.numeroJour,
+                                date: donnees.jourActuel.date,
+                                compteur: donnees.jourActuel.compteur,
+                                bateauxVus: donnees.jourActuel.bateauxVus
+                            });
+                        }
+
+                        const nouveauNumeroJour = (donnees.jourActuel ? donnees.jourActuel.numeroJour : 0) + 1;
+                        compteurJournalier = {
+                            derniereReinitialisation: aujourdhui,
+                            joursHistorique: donnees.joursHistorique || [],
+                            jourActuel: {
+                                numeroJour: nouveauNumeroJour,
+                                date: aujourdhui,
+                                compteur: 0,
+                                bateauxVus: [],
+                                bateauxActuellementEnZoneRouge: []
+                            }
+                        };
+                        console.log(`📅 Nouveau jour détecté: Jour ${nouveauNumeroJour}`);
+                        sauvegarderCompteurJournalier();
+                    }
+                } catch (e) {
+                    console.warn('⚠️ Erreur restauration compteur journalier:', e);
+                    reinitialiserCompteurJournalier();
+                }
+            } else {
+                reinitialiserCompteurJournalier();
+            }
+        }
+
+        function reinitialiserCompteurJournalier() {
+            const aujourdhui = new Date().toDateString();
+            compteurJournalier = {
+                derniereReinitialisation: aujourdhui,
+                joursHistorique: [],
+                jourActuel: {
+                    numeroJour: 1,
+                    date: aujourdhui,
+                    compteur: 0,
+                    bateauxVus: [],
+                    bateauxActuellementEnZoneRouge: []
+                }
+            };
+            sauvegarderCompteurJournalier();
+            console.log('🔄 Compteur journalier initialisé: Jour 1');
+        }
+
+        function sauvegarderCompteurJournalier() {
+            try {
+                localStorage.setItem('trackship_compteur_quotidien', JSON.stringify(compteurJournalier));
+            } catch (e) {
+                console.warn('⚠️ Erreur sauvegarde compteur journalier:', e);
+            }
+        }
+
+        function gererComptageZoneRouge(naviresActuels) {
+            if (!compteurJournalier.jourActuel) return;
+
+            // Vérifier changement de jour
+            const aujourdhui = new Date().toDateString();
+            if (compteurJournalier.jourActuel.date !== aujourdhui) {
+                // Archiver jour précédent
+                compteurJournalier.joursHistorique.push({
+                    numeroJour: compteurJournalier.jourActuel.numeroJour,
+                    date: compteurJournalier.jourActuel.date,
+                    compteur: compteurJournalier.jourActuel.compteur,
+                    bateauxVus: compteurJournalier.jourActuel.bateauxVus
+                });
+
+                // Nouveau jour
+                compteurJournalier.jourActuel = {
+                    numeroJour: compteurJournalier.jourActuel.numeroJour + 1,
+                    date: aujourdhui,
+                    compteur: 0,
+                    bateauxVus: [],
+                    bateauxActuellementEnZoneRouge: []
+                };
+                console.log(`📅 Changement de jour: Jour ${compteurJournalier.jourActuel.numeroJour}`);
+                sauvegarderCompteurJournalier();
+            }
+
+            const jourActuel = compteurJournalier.jourActuel;
+            const bateauxEnZoneRougeActuellement = new Set();
+
+            // Détecter les navires en zone rouge (≤ 1000m)
+            naviresActuels.forEach(navire => {
+                const mmsi = navire.mmsi?.toString();
+                if (!mmsi) return;
+
+                const analyse = analyserNavire(navire);
+                if (analyse.statut === 'alerte' && analyse.distance <= 1000) {
+                    bateauxEnZoneRougeActuellement.add(mmsi);
+
+                    // Vérifier si c'est une ENTRÉE en zone rouge
+                    if (!jourActuel.bateauxActuellementEnZoneRouge.includes(mmsi)) {
+                        // ENTRÉE détectée
+                        jourActuel.compteur++;
+
+                        if (!jourActuel.bateauxVus.includes(mmsi)) {
+                            jourActuel.bateauxVus.push(mmsi);
+                            console.log(`🔴 ENTRÉE zone rouge: ${navire.shipName} (${mmsi}) - Compteur: ${jourActuel.compteur}`);
+                        } else {
+                            console.log(`🔴 RÉENTRÉE zone rouge: ${navire.shipName} (${mmsi}) - Compteur: ${jourActuel.compteur}`);
+                        }
+
+                        sauvegarderCompteurJournalier();
+                    }
+                }
+            });
+
+            // Mettre à jour la liste des bateaux actuellement en zone rouge
+            jourActuel.bateauxActuellementEnZoneRouge = Array.from(bateauxEnZoneRougeActuellement);
+        }
+
+        function afficherPanneauCompteur() {
+            const panneauElement = document.getElementById('panneauCompteurJournalier');
+            if (!panneauElement || !compteurJournalier.jourActuel) return;
+
+            const jourActuel = compteurJournalier.jourActuel;
+            const historique = [...compteurJournalier.joursHistorique].reverse().slice(0, 7); // 7 derniers jours
+
+            let htmlHistorique = '';
+            historique.forEach(jour => {
+                htmlHistorique += `
+                    <div class="jour-item">
+                        <span class="jour-numero">Jour ${jour.numeroJour}</span>
+                        <span class="jour-valeur">${jour.compteur} passage${jour.compteur > 1 ? 's' : ''}</span>
+                    </div>
+                `;
+            });
+
+            panneauElement.innerHTML = `
+                <h3>📊 Compteur de passages - Zone Rouge</h3>
+                <div class="compteur-jour-actuel">
+                    <div class="jour-label">Jour ${jourActuel.numeroJour} (Aujourd'hui)</div>
+                    <div class="jour-compteur">${jourActuel.compteur} passage${jourActuel.compteur > 1 ? 's' : ''}</div>
+                </div>
+                ${historique.length > 0 ? `
+                    <div class="compteur-historique">
+                        ${htmlHistorique}
+                    </div>
+                ` : ''}
+            `;
         }
 
         // Nettoyage RGPD - Conservation des numéros pour navires dans la zone (même à l'arrêt)
@@ -244,7 +446,7 @@
                     mmsiAGarder.add(mmsi);
                     
                     // Mettre à jour le timestamp si le navire est en mouvement
-                    if (naviresNumerotes.has(mmsi) && estEnMouvement(navire)) {
+                    if (naviresNumerotes.has(mmsi) && estEnMouvementStabilise(navire)) {
                         const data = naviresNumerotes.get(mmsi);
                         data.dernierMouvement = new Date().toISOString();
                         naviresNumerotes.set(mmsi, data);
@@ -267,6 +469,27 @@
             }
         }
 
+        // Nettoyage de l'historique des vitesses (navires sortis de zone)
+        function nettoyageHistoriqueVitesses(naviresPresentsDansZoneVerte) {
+            const mmsiPresents = new Set(
+                naviresPresentsDansZoneVerte
+                    .filter(n => n.mmsi)
+                    .map(n => n.mmsi.toString())
+            );
+
+            let compteurSuppression = 0;
+            historiqueVitesses.forEach((data, mmsi) => {
+                if (!mmsiPresents.has(mmsi)) {
+                    historiqueVitesses.delete(mmsi);
+                    compteurSuppression++;
+                }
+            });
+
+            if (compteurSuppression > 0) {
+                console.log(`🧹 Historique vitesses nettoyé: ${compteurSuppression} navire(s) oublié(s)`);
+            }
+        }
+
         // Attribution d'un numéro à un navire EN MOUVEMENT uniquement
         function attribuerNumero(navire) {
             // Vérifier si nouvelle journée
@@ -282,7 +505,7 @@
             }
 
             // NOUVEAU : Seuls les navires EN MOUVEMENT peuvent avoir/garder un numéro
-            const enMouvement = estEnMouvement(navire);
+            const enMouvement = estEnMouvementStabilise(navire);
             if (!enMouvement) {
                 console.log(`⏸️ ${navire.shipName} à l'arrêt (vitesse: ${navire.speed}) - pas de nouveau numéro`);
                 return null; // Pas de numéro pour les navires à l'arrêt
@@ -347,7 +570,7 @@
                 if (!navire.mmsi) return false;
                 
                 // OBLIGATOIRE : doit être en mouvement
-                const enMouvement = estEnMouvement(navire);
+                const enMouvement = estEnMouvementStabilise(navire);
                 if (!enMouvement) return false;
                 
                 const distance = calculerDistance(
@@ -404,9 +627,10 @@
 
         // Fonction pour créer une icône directionnelle avec numéro (SEULEMENT si en mouvement)
         function creerIconeDirectionnelle(navire, analyse) {
-            const enMouvement = estEnMouvement(navire);
+            const enMouvement = estEnMouvementStabilise(navire);
+            const surTerre = estEmetteurTerrestre(navire);
             const course = parseFloat(navire.course) || 0;
-            
+
             // NOUVEAU : Le numéro ne s'affiche QUE si le navire est en mouvement
             const numeroNavire = enMouvement ? obtenirNumeroNavire(navire) : null;
             
@@ -447,7 +671,7 @@
                             font-size: 12px;
                             color: white;
                             text-shadow: 1px 1px 2px rgba(0,0,0,0.8);
-                        ">🚢</div>
+                        ">${surTerre ? '📡' : '🚢'}</div>
                     </div>
                 `;
             } else {
@@ -466,7 +690,7 @@
                         font-size: 12px;
                         opacity: ${opacite};
                         position: relative;
-                    ">🚢</div>
+                    ">${surTerre ? '📡' : '🚢'}</div>
                 `;
             }
 
@@ -653,17 +877,96 @@
             return R * c;
         }
 
-        // Vérification si navire en mouvement (DEBUG amélioré)
-        function estEnMouvement(navire) {
-            const vitesse = parseFloat(navire.speed) || 0;
-            const enMouvement = vitesse > 0.5;
-            
-            // DEBUG : Log détaillé
-            if (navire.shipName) {
-                console.log(`🚢 ${navire.shipName} - Vitesse brute: "${navire.speed}" - Vitesse parsée: ${vitesse} - En mouvement: ${enMouvement}`);
+        // ===== DÉTECTION TERRE/EAU =====
+
+        // Algorithme ray-casting pour point dans polygone
+        function estSurEau(latitude, longitude) {
+            const polygone = POLYGONE_SEINE_PARIS;
+
+            let inside = false;
+            for (let i = 0, j = polygone.length - 1; i < polygone.length; j = i++) {
+                const xi = polygone[i][0], yi = polygone[i][1];
+                const xj = polygone[j][0], yj = polygone[j][1];
+
+                const intersect = ((yi > longitude) !== (yj > longitude))
+                    && (latitude < (xj - xi) * (longitude - yi) / (yj - yi) + xi);
+
+                if (intersect) inside = !inside;
             }
-            
-            return enMouvement;
+
+            return inside;
+        }
+
+        // Vérification si navire est un émetteur terrestre
+        function estEmetteurTerrestre(navire) {
+            if (!navire.latitude || !navire.longitude) return false;
+            return !estSurEau(navire.latitude, navire.longitude);
+        }
+
+        // Vérification si navire en mouvement - VERSION STABILISÉE avec historique
+        function estEnMouvementStabilise(navire) {
+            const vitesse = parseFloat(navire.speed) || 0;
+            const mmsi = navire.mmsi?.toString();
+
+            if (!mmsi) {
+                // Pas de MMSI = pas de tracking possible, décision instantanée
+                return vitesse > 0.5;
+            }
+
+            // Initialiser l'historique si premier scan
+            if (!historiqueVitesses.has(mmsi)) {
+                historiqueVitesses.set(mmsi, {
+                    scans: [],
+                    scansMouvement: 0,
+                    scansArret: 0,
+                    dernierScan: Date.now(),
+                    derniereVitesse: vitesse
+                });
+            }
+
+            const historique = historiqueVitesses.get(mmsi);
+            const estAuDessusSeuil = vitesse > 0.5;
+
+            // Mise à jour de l'historique
+            historique.scans.push(vitesse);
+            if (historique.scans.length > 3) {
+                historique.scans.shift(); // Garder seulement 3 derniers scans
+            }
+
+            // Compteur de scans consécutifs
+            if (estAuDessusSeuil) {
+                historique.scansMouvement++;
+                historique.scansArret = 0;
+            } else {
+                historique.scansArret++;
+                historique.scansMouvement = 0;
+            }
+
+            historique.dernierScan = Date.now();
+            historique.derniereVitesse = vitesse;
+            historiqueVitesses.set(mmsi, historique);
+
+            // RÈGLE DE STABILISATION
+            // 1. Attribution : 2 scans consécutifs > 0.5 kn
+            // 2. Retrait : 2 scans consécutifs ≤ 0.5 kn (délai de grâce)
+
+            let enMouvementStabilise = false;
+
+            if (historique.scansMouvement >= SCANS_REQUIS_MOUVEMENT) {
+                // En mouvement confirmé
+                enMouvementStabilise = true;
+            } else if (historique.scansArret < SCANS_DELAI_GRACE) {
+                // Délai de grâce : encore considéré en mouvement si avait un numéro
+                if (naviresNumerotes.has(mmsi)) {
+                    enMouvementStabilise = true;
+                }
+            }
+
+            if (navire.shipName) {
+                console.log(`🚢 ${navire.shipName} - V:${vitesse.toFixed(1)}kn - Scans↑:${historique.scansMouvement} Scans↓:${historique.scansArret} - Mouvement:${enMouvementStabilise}`);
+            }
+
+            return enMouvementStabilise;
         }
 
         // Vérification si navire conforme aux critères d'affichage
@@ -743,7 +1046,7 @@
         function gererTrackingZoneRouge() {
             const naviresAlerteEnMouvement = navires.filter(navire => {
                 const analyse = analyserNavire(navire);
-                return analyse.statut === 'alerte' && estEnMouvement(navire) && navire.mmsi;
+                return analyse.statut === 'alerte' && estEnMouvementStabilise(navire) && navire.mmsi;
             });
 
             // Mise à jour de la liste de tracking
@@ -805,7 +1108,7 @@
             const panneauElement = document.getElementById('panneauAttentionSidebar');
             const contenuElement = document.getElementById('contenuPanneauAttention');
 
-            const naviresEnMouvementVigilance = naviresVigilance.filter(navire => estEnMouvement(navire));
+            const naviresEnMouvementVigilance = naviresVigilance.filter(navire => estEnMouvementStabilise(navire));
 
             if (naviresEnMouvementVigilance.length === 0) {
                 panneauElement.style.display = 'none';
@@ -902,9 +1205,9 @@
             
             switch (filtre) {
                 case 'mouvement':
-                    return navires.filter(navire => estEnMouvement(navire));
+                    return navires.filter(navire => estEnMouvementStabilise(navire));
                 case 'arret':
-                    return navires.filter(navire => !estEnMouvement(navire));
+                    return navires.filter(navire => !estEnMouvementStabilise(navire));
                 case 'tous':
                 default:
                     return navires;
@@ -924,22 +1227,25 @@
 
             naviresAfficher.forEach(function(navire) {
                 const analyse = analyserNavire(navire);
-                const enMouvement = estEnMouvement(navire);
+                const enMouvement = estEnMouvementStabilise(navire);
+                const surTerre = estEmetteurTerrestre(navire);
                 const numeroNavire = obtenirNumeroNavire(navire);
-                
+
                 // Utiliser la fonction creerIconeDirectionnelle qui existe déjà
                 const iconeNavire = creerIconeDirectionnelle(navire, analyse);
 
                 const statutTexte = enMouvement ? 'EN MOUVEMENT' : 'À L\'ARRÊT';
-                const nomNavire = navire.shipName || 'Navire inconnu';
+                const typeLabel = surTerre ? 'Émetteur terrestre' : 'Navire';
+                const nomNavire = navire.shipName || (surTerre ? 'Émetteur inconnu' : 'Navire inconnu');
                 const vitesse = navire.speed || 'N/A';
                 const longueur = navire.length || 'N/A';
                 const mmsi = navire.mmsi || 'N/A';
-                const typeNavire = navire.shipType || 'N/A';
+                const typeNavire = navire.shipType || typeLabel;
                 const cap = navire.course ? Math.round(navire.course) + '°' : 'N/A';
                 const numeroText = numeroNavire && enMouvement ? '#' + numeroNavire : '';
-                
-                const popupContent = '<div style="min-width: 200px;"><h4 style="margin: 0 0 10px 0; color: ' + analyse.couleur + ';">' + numeroText + (numeroText ? ' - ' : '') + '🚢 ' + nomNavire + ' ' + analyse.emoji + '</h4><div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 12px;"><div><strong>Vitesse:</strong> ' + vitesse + ' kn</div><div><strong>Cap:</strong> ' + cap + '</div><div><strong>Longueur:</strong> ' + longueur + ' m</div><div><strong>MMSI:</strong> ' + mmsi + '</div><div><strong>Type:</strong> ' + typeNavire + '</div><div><strong>Distance:</strong> ' + analyse.distance + 'm</div><div><strong>Statut:</strong> <span style="color: ' + analyse.couleur + '; font-weight: bold;">' + statutTexte + '</span></div></div><div style="margin-top: 8px; font-size: 11px; color: #666;">📍 ' + navire.latitude.toFixed(6) + ', ' + navire.longitude.toFixed(6) + '</div></div>';
+                const emoji = surTerre ? '📡' : '🚢';
+
+                const popupContent = '<div style="min-width: 200px;"><h4 style="margin: 0 0 10px 0; color: ' + analyse.couleur + ';">' + numeroText + (numeroText ? ' - ' : '') + emoji + ' ' + nomNavire + ' ' + analyse.emoji + '</h4>' + (surTerre ? '<div style="background: #fff3cd; padding: 5px; border-radius: 4px; margin-bottom: 8px; font-weight: bold; color: #856404;">⚠️ Type: Émetteur terrestre</div>' : '') + '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 5px; font-size: 12px;"><div><strong>Vitesse:</strong> ' + vitesse + ' kn</div><div><strong>Cap:</strong> ' + cap + '</div><div><strong>Longueur:</strong> ' + longueur + ' m</div><div><strong>MMSI:</strong> ' + mmsi + '</div><div><strong>Type:</strong> ' + typeLabel + '</div><div><strong>Distance:</strong> ' + analyse.distance + 'm</div><div><strong>Statut:</strong> <span style="color: ' + analyse.couleur + '; font-weight: bold;">' + statutTexte + '</span></div></div><div style="margin-top: 8px; font-size: 11px; color: #666;">📍 ' + navire.latitude.toFixed(6) + ', ' + navire.longitude.toFixed(6) + '</div></div>';
 
                 const marker = L.marker([navire.latitude, navire.longitude], {icon: iconeNavire})
                     .addTo(map)
@@ -978,19 +1284,23 @@
 
             const htmlNavires = naviresTries.map(navire => {
                 const analyse = analyserNavire(navire);
-                const enMouvement = estEnMouvement(navire);
+                const enMouvement = estEnMouvementStabilise(navire);
+                const surTerre = estEmetteurTerrestre(navire);
                 const estTracke = naviresTrackes.has(navire.mmsi?.toString());
                 const cap = navire.course ? `${Math.round(navire.course)}°` : 'N/A';
                 const numeroNavire = obtenirNumeroNavire(navire);
                 const numeroText = numeroNavire && enMouvement ? `#${numeroNavire}` : '';
-                
+                const emoji = surTerre ? '📡' : '🚢';
+                const nomNavire = navire.shipName || (surTerre ? 'Émetteur inconnu' : 'Navire inconnu');
+
                 return `
-                    <div class="navire-item ${analyse.classeCSS}" onclick="centrerSurNavire(${navire.latitude}, ${navire.longitude})">
+                    <div class="navire-item ${analyse.classeCSS} ${surTerre ? 'navire-terrestre' : ''}" onclick="centrerSurNavire(${navire.latitude}, ${navire.longitude})">
                         <div class="navire-header">
                             <span class="navire-nom">
-                                🚢 ${numeroText} ${navire.shipName || 'Navire inconnu'} ${analyse.emoji}
+                                ${emoji} ${numeroText} ${nomNavire} ${analyse.emoji}
                                 ${enMouvement ? '🔄' : '⏸️'}
                                 ${estTracke ? '🎯' : ''}
+                                ${surTerre ? ' (TERRESTRE)' : ''}
                                 ${numeroNavire && !enMouvement ? ' (numéro caché - à l\'arrêt)' : ''}
                             </span>
                             <span class="navire-distance ${analyse.classeDistance}">
@@ -998,6 +1308,10 @@
                             </span>
                         </div>
                         <div class="navire-details">
+                            <div class="navire-detail">
+                                <span>Type:</span>
+                                <strong>${surTerre ? 'Émetteur terrestre' : 'Navire'}</strong>
+                            </div>
                             <div class="navire-detail">
                                 <span>Numéro:</span>
                                 <strong>${numeroNavire ? `#${numeroNavire}${!enMouvement ? ' (caché)' : ''}` : 'Non attribué'}</strong>
@@ -1045,7 +1359,7 @@
             
             const htmlNonConformes = naviresNonConformes.map(navire => {
                 const analyse = analyserNavire(navire);
-                const enMouvement = estEnMouvement(navire);
+                const enMouvement = estEnMouvementStabilise(navire);
                 const numeroNavire = obtenirNumeroNavire(navire);
                 const numeroText = numeroNavire ? `#${numeroNavire}` : '';
                 
@@ -1140,7 +1454,7 @@
                 return analyse.statut === 'vigilance' || analyse.statut === 'alerte';
             });
             
-            const naviresAlerteMouvement = naviresZoneAlerte.filter(navire => estEnMouvement(navire));
+            const naviresAlerteMouvement = naviresZoneAlerte.filter(navire => estEnMouvementStabilise(navire));
             
             // Panneau orange : navires EN MOUVEMENT dans zone 2km - VERSION SIDEBAR
             afficherPanneauAttentionSidebar(naviresZoneVigilance);
@@ -1197,6 +1511,7 @@
                 maxLon: maxLon.toFixed(6),
                 pageSize: modeCible && naviresTrackes.size > 0 ? '20' : '100'
             });
+            
 
             const url = `api/euris-proxy.php?${params.toString()}`;
             
@@ -1288,11 +1603,12 @@
                 } else {
                     console.log('🔄 Scan suivant : attribution nouveaux + nettoyage');
                     navires.forEach(navire => {
-                        if (estEnMouvement(navire)) {
+                        if (estEnMouvementStabilise(navire)) {
                             attribuerNumero(navire);
                         }
                     });
                     nettoyageRGPD(navires);
+                    nettoyageHistoriqueVitesses(navires);
                 }
                 
                 // Optionnel : identifier les navires avec des données manquantes qui peuvent bouger
@@ -1312,7 +1628,11 @@
                 mettreAJourListeNonConformes();
                 mettreAJourStatistiques();
                 gererAlertes();
-                
+
+                // Gestion du compteur journalier
+                gererComptageZoneRouge(navires);
+                afficherPanneauCompteur();
+
                 const naviresAfficher = filtrerNavires(navires);
                 let statusMessage = `${naviresAfficher.length} navires surveillés`;
                 if (naviresTrackes.size > 0) {
