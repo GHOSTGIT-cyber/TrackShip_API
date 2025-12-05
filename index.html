@@ -273,6 +273,9 @@
                 };
 
                 console.log(`📊 Compteur initialisé: Jour ${data.numero_jour}, ${data.compteur_passages} passages`);
+
+                // Afficher le panneau immédiatement après initialisation
+                await afficherPanneauCompteur();
             } catch (error) {
                 console.error('❌ Erreur connexion API compteur:', error);
             }
