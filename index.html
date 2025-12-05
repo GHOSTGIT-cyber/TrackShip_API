@@ -194,15 +194,15 @@
         ];
 
         // Initialisation du système de numérotation
-        function initialiserNumerotation() {
+        async function initialiserNumerotation() {
             const aujourdhui = new Date().toDateString();
-            
+
             // Récupération depuis localStorage - SEULEMENT le compteur journalier
             const donneesStockees = localStorage.getItem('trackship_compteur');
             if (donneesStockees) {
                 try {
                     const donnees = JSON.parse(donneesStockees);
-                    
+
                     // Vérifier si c'est le même jour
                     if (donnees.date === aujourdhui) {
                         prochainNumero = donnees.prochainNumero || 1;
@@ -219,13 +219,13 @@
             } else {
                 reinitialiserNumerotation();
             }
-            
+
             // IMPORTANT: Les navires ne sont jamais sauvegardés, seul le compteur l'est
             naviresNumerotes.clear();
             console.log('🗑️ Mémoire des navires vidée (conforme RGPD)');
 
-            // Initialiser le compteur journalier
-            initialiserCompteurJournalier();
+            // Initialiser le compteur journalier (async)
+            await initialiserCompteurJournalier();
         }
 
         // Réinitialisation du compteur pour une nouvelle journée
@@ -253,180 +253,156 @@
 
         // ===== SYSTÈME COMPTEUR JOURNALIER =====
 
-        function initialiserCompteurJournalier() {
-            const aujourdhui = new Date().toDateString();
+        async function initialiserCompteurJournalier() {
+            try {
+                const response = await fetch('api/compteur.php?action=get_current');
+                const data = await response.json();
 
-            const donneesStockees = localStorage.getItem('trackship_compteur_quotidien');
-            if (donneesStockees) {
-                try {
-                    const donnees = JSON.parse(donneesStockees);
-
-                    if (donnees.jourActuel && donnees.jourActuel.date === aujourdhui) {
-                        // Même jour, restaurer
-                        compteurJournalier = donnees;
-                        console.log(`📊 Compteur journalier restauré: Jour ${compteurJournalier.jourActuel.numeroJour}, ${compteurJournalier.jourActuel.compteur} passages`);
-                    } else {
-                        // Nouveau jour détecté
-                        if (donnees.jourActuel) {
-                            // Archiver le jour précédent
-                            donnees.joursHistorique = donnees.joursHistorique || [];
-                            donnees.joursHistorique.push({
-                                numeroJour: donnees.jourActuel.numeroJour,
-                                date: donnees.jourActuel.date,
-                                compteur: donnees.jourActuel.compteur,
-                                bateauxVus: donnees.jourActuel.bateauxVus
-                            });
-                        }
-
-                        const nouveauNumeroJour = (donnees.jourActuel ? donnees.jourActuel.numeroJour : 0) + 1;
-                        compteurJournalier = {
-                            derniereReinitialisation: aujourdhui,
-                            joursHistorique: donnees.joursHistorique || [],
-                            jourActuel: {
-                                numeroJour: nouveauNumeroJour,
-                                date: aujourdhui,
-                                compteur: 0,
-                                bateauxVus: [],
-                                bateauxActuellementEnZoneRouge: []
-                            }
-                        };
-                        console.log(`📅 Nouveau jour détecté: Jour ${nouveauNumeroJour}`);
-                        sauvegarderCompteurJournalier();
-                    }
-                } catch (e) {
-                    console.warn('⚠️ Erreur restauration compteur journalier:', e);
-                    reinitialiserCompteurJournalier();
+                if (data.error) {
+                    console.error('❌ Erreur initialisation compteur:', data.error);
+                    return;
                 }
-            } else {
-                reinitialiserCompteurJournalier();
+
+                compteurJournalier = {
+                    jourActuel: {
+                        numeroJour: data.numero_jour,
+                        date: data.date_jour,
+                        compteur: data.compteur_passages,
+                        bateauxActuellementEnZoneRouge: data.bateaux_zone_rouge || []
+                    }
+                };
+
+                console.log(`📊 Compteur initialisé: Jour ${data.numero_jour}, ${data.compteur_passages} passages`);
+            } catch (error) {
+                console.error('❌ Erreur connexion API compteur:', error);
             }
         }
 
         function reinitialiserCompteurJournalier() {
-            const aujourdhui = new Date().toDateString();
-            compteurJournalier = {
-                derniereReinitialisation: aujourdhui,
-                joursHistorique: [],
-                jourActuel: {
-                    numeroJour: 1,
-                    date: aujourdhui,
-                    compteur: 0,
-                    bateauxVus: [],
-                    bateauxActuellementEnZoneRouge: []
-                }
-            };
-            sauvegarderCompteurJournalier();
-            console.log('🔄 Compteur journalier initialisé: Jour 1');
+            // Fonction conservée pour compatibilité mais non utilisée avec MySQL
+            console.log('⚠️ reinitialiserCompteurJournalier() - Non utilisé avec MySQL');
         }
 
         function sauvegarderCompteurJournalier() {
-            try {
-                localStorage.setItem('trackship_compteur_quotidien', JSON.stringify(compteurJournalier));
-            } catch (e) {
-                console.warn('⚠️ Erreur sauvegarde compteur journalier:', e);
-            }
+            // Fonction conservée pour compatibilité - La sauvegarde est automatique via API
         }
 
-        function gererComptageZoneRouge(naviresActuels) {
+        async function gererComptageZoneRouge(naviresActuels) {
             if (!compteurJournalier.jourActuel) return;
 
-            // Vérifier changement de jour
-            const aujourdhui = new Date().toDateString();
-            if (compteurJournalier.jourActuel.date !== aujourdhui) {
-                // Archiver jour précédent
-                compteurJournalier.joursHistorique.push({
-                    numeroJour: compteurJournalier.jourActuel.numeroJour,
-                    date: compteurJournalier.jourActuel.date,
-                    compteur: compteurJournalier.jourActuel.compteur,
-                    bateauxVus: compteurJournalier.jourActuel.bateauxVus
-                });
-
-                // Nouveau jour
-                compteurJournalier.jourActuel = {
-                    numeroJour: compteurJournalier.jourActuel.numeroJour + 1,
-                    date: aujourdhui,
-                    compteur: 0,
-                    bateauxVus: [],
-                    bateauxActuellementEnZoneRouge: []
-                };
-                console.log(`📅 Changement de jour: Jour ${compteurJournalier.jourActuel.numeroJour}`);
-                sauvegarderCompteurJournalier();
-            }
-
-            const jourActuel = compteurJournalier.jourActuel;
-            const bateauxEnZoneRougeActuellement = new Set();
+            const bateauxEnZoneRougeActuellement = [];
+            const bateauxEntrantDansZone = [];
 
             // Détecter les navires en zone rouge (≤ 1000m)
             naviresActuels.forEach(navire => {
-                const mmsi = navire.mmsi?.toString();
-                if (!mmsi) return;
+                const trackId = navire.trackId?.toString() || navire.mmsi?.toString();
+                if (!trackId) return;
 
                 const analyse = analyserNavire(navire);
                 if (analyse.statut === 'alerte' && analyse.distance <= 1000) {
-                    bateauxEnZoneRougeActuellement.add(mmsi);
+                    bateauxEnZoneRougeActuellement.push(trackId);
 
                     // Vérifier si c'est une ENTRÉE en zone rouge
-                    if (!jourActuel.bateauxActuellementEnZoneRouge.includes(mmsi)) {
-                        // ENTRÉE détectée
-                        jourActuel.compteur++;
-
-                        if (!jourActuel.bateauxVus.includes(mmsi)) {
-                            jourActuel.bateauxVus.push(mmsi);
-                            console.log(`🔴 ENTRÉE zone rouge: ${navire.shipName} (${mmsi}) - Compteur: ${jourActuel.compteur}`);
-                        } else {
-                            console.log(`🔴 RÉENTRÉE zone rouge: ${navire.shipName} (${mmsi}) - Compteur: ${jourActuel.compteur}`);
-                        }
-
-                        sauvegarderCompteurJournalier();
+                    if (!compteurJournalier.jourActuel.bateauxActuellementEnZoneRouge.includes(trackId)) {
+                        bateauxEntrantDansZone.push({
+                            trackId: trackId,
+                            shipName: navire.shipName || `Track ${trackId}`
+                        });
                     }
                 }
             });
 
-            // Mettre à jour la liste des bateaux actuellement en zone rouge
-            jourActuel.bateauxActuellementEnZoneRouge = Array.from(bateauxEnZoneRougeActuellement);
+            // Envoyer les entrées à l'API
+            if (bateauxEntrantDansZone.length > 0) {
+                for (const bateau of bateauxEntrantDansZone) {
+                    try {
+                        const response = await fetch('api/compteur.php?action=increment', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(bateau)
+                        });
+
+                        const result = await response.json();
+                        if (result.success) {
+                            // Mettre à jour le compteur local
+                            compteurJournalier.jourActuel.compteur = result.compteur;
+                            console.log(`🔴 ENTRÉE zone rouge: ${bateau.shipName} (${bateau.trackId}) - Compteur: ${result.compteur}`);
+                        }
+                    } catch (error) {
+                        console.error('❌ Erreur incrémentation compteur:', error);
+                    }
+                }
+            }
+
+            // Mettre à jour la liste des bateaux actifs en zone rouge via API
+            try {
+                await fetch('api/compteur.php?action=update_zone_rouge', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({trackIds: bateauxEnZoneRougeActuellement})
+                });
+
+                compteurJournalier.jourActuel.bateauxActuellementEnZoneRouge = bateauxEnZoneRougeActuellement;
+            } catch (error) {
+                console.error('❌ Erreur mise à jour zone rouge:', error);
+            }
+
+            // Rafraîchir l'affichage
+            await afficherPanneauCompteur();
         }
 
-        function afficherPanneauCompteur() {
+        async function afficherPanneauCompteur() {
             const panneauElement = document.getElementById('panneauCompteurJournalier');
             if (!panneauElement || !compteurJournalier.jourActuel) return;
 
-            const jourActuel = compteurJournalier.jourActuel;
-            const historique = [...compteurJournalier.joursHistorique].reverse(); // TOUS les jours conservés
+            try {
+                // Récupérer l'historique depuis l'API
+                const response = await fetch('api/compteur.php?action=get_history');
+                const data = await response.json();
 
-            // Calculer le total cumulé
-            const totalCumule = historique.reduce((total, jour) => total + jour.compteur, 0) + jourActuel.compteur;
+                if (data.error) {
+                    console.error('❌ Erreur chargement historique:', data.error);
+                    return;
+                }
 
-            let htmlHistorique = '';
-            historique.forEach(jour => {
-                htmlHistorique += `
-                    <div class="jour-item">
-                        <span class="jour-numero">Jour ${jour.numeroJour}</span>
-                        <span class="jour-valeur">${jour.compteur} passage${jour.compteur > 1 ? 's' : ''}</span>
+                const jourActuel = compteurJournalier.jourActuel;
+                const historique = data.historique.filter(j => parseInt(j.numero_jour) !== jourActuel.numeroJour).reverse();
+                const totalCumule = data.total_cumule;
+
+                let htmlHistorique = '';
+                historique.forEach(jour => {
+                    htmlHistorique += `
+                        <div class="jour-item">
+                            <span class="jour-numero">Jour ${jour.numero_jour}</span>
+                            <span class="jour-valeur">${jour.compteur_passages} passage${jour.compteur_passages > 1 ? 's' : ''}</span>
+                        </div>
+                    `;
+                });
+
+                panneauElement.innerHTML = `
+                    <h3>📊 Compteur de passages - Zone Rouge</h3>
+                    <div class="compteur-jour-actuel">
+                        <div class="jour-label">Jour ${jourActuel.numeroJour} (Aujourd'hui)</div>
+                        <div class="jour-compteur">${jourActuel.compteur} passage${jourActuel.compteur > 1 ? 's' : ''}</div>
                     </div>
+                    <div class="compteur-total">
+                        <strong>Total cumulé:</strong> ${totalCumule} passages sur ${jourActuel.numeroJour} jour${jourActuel.numeroJour > 1 ? 's' : ''}
+                    </div>
+                    ${historique.length > 0 ? `
+                        <div class="compteur-historique-toggle" onclick="toggleHistorique()">
+                            <span id="historique-icon">▶</span> Voir l'historique (${historique.length} jour${historique.length > 1 ? 's' : ''})
+                        </div>
+                        <div class="compteur-historique" id="historiqueContent" style="display: none;">
+                            ${htmlHistorique}
+                        </div>
+                    ` : ''}
+                    <button class="btn-effacer-historique" onclick="ouvrirMenuEffacement()">
+                        🗑️ Effacer des données
+                    </button>
                 `;
-            });
-
-            panneauElement.innerHTML = `
-                <h3>📊 Compteur de passages - Zone Rouge</h3>
-                <div class="compteur-jour-actuel">
-                    <div class="jour-label">Jour ${jourActuel.numeroJour} (Aujourd'hui)</div>
-                    <div class="jour-compteur">${jourActuel.compteur} passage${jourActuel.compteur > 1 ? 's' : ''}</div>
-                </div>
-                <div class="compteur-total">
-                    <strong>Total cumulé:</strong> ${totalCumule} passages sur ${jourActuel.numeroJour} jour${jourActuel.numeroJour > 1 ? 's' : ''}
-                </div>
-                ${historique.length > 0 ? `
-                    <div class="compteur-historique-toggle" onclick="toggleHistorique()">
-                        <span id="historique-icon">▶</span> Voir l'historique (${historique.length} jour${historique.length > 1 ? 's' : ''})
-                    </div>
-                    <div class="compteur-historique" id="historiqueContent" style="display: none;">
-                        ${htmlHistorique}
-                    </div>
-                ` : ''}
-                <button class="btn-effacer-historique" onclick="ouvrirMenuEffacement()">
-                    🗑️ Effacer des données
-                </button>
-            `;
+            } catch (error) {
+                console.error('❌ Erreur affichage compteur:', error);
+            }
         }
 
         function toggleHistorique() {
@@ -441,7 +417,7 @@
             }
         }
 
-        function ouvrirMenuEffacement() {
+        async function ouvrirMenuEffacement() {
             const jourActuel = compteurJournalier.jourActuel.numeroJour;
             const message = `🗑️ Effacer l'historique des passages\n\n` +
                 `Entrez la période à effacer :\n\n` +
@@ -451,58 +427,69 @@
                 `Jours disponibles : 1 à ${jourActuel - 1}`;
 
             const reponse = prompt(message);
-
             if (!reponse) return; // Annulé
 
+            let requestBody = {};
+
             if (reponse.toLowerCase() === 'tout') {
-                if (confirm('⚠️ ATTENTION : Voulez-vous vraiment effacer TOUT l\'historique ?\n\nCette action est irréversible !')) {
-                    compteurJournalier.joursHistorique = [];
-                    sauvegarderCompteurJournalier();
-                    afficherPanneauCompteur();
-                    alert('✅ Tout l\'historique a été effacé !');
+                if (!confirm('⚠️ ATTENTION : Voulez-vous vraiment effacer TOUT l\'historique ?\n\nCette action est irréversible !')) {
+                    return;
                 }
-                return;
+                requestBody = {type: 'all'};
+            } else {
+                const rangMatch = reponse.match(/^(\d+)-(\d+)$/);
+                const singleMatch = reponse.match(/^(\d+)$/);
+
+                if (rangMatch) {
+                    const debut = parseInt(rangMatch[1]);
+                    const fin = parseInt(rangMatch[2]);
+
+                    if (debut >= fin || debut < 1 || fin >= jourActuel) {
+                        alert('❌ Plage invalide ! Utilisez un format comme "1-30"');
+                        return;
+                    }
+
+                    if (!confirm(`⚠️ Effacer les jours ${debut} à ${fin} ?\n\nCette action est irréversible !`)) {
+                        return;
+                    }
+                    requestBody = {type: 'range', debut, fin};
+                } else if (singleMatch) {
+                    const jourAEffacer = parseInt(singleMatch[1]);
+
+                    if (jourAEffacer < 1 || jourAEffacer >= jourActuel) {
+                        alert(`❌ Jour invalide ! Choisissez entre 1 et ${jourActuel - 1}`);
+                        return;
+                    }
+
+                    if (!confirm(`⚠️ Effacer le jour ${jourAEffacer} ?\n\nCette action est irréversible !`)) {
+                        return;
+                    }
+                    requestBody = {type: 'single', jour: jourAEffacer};
+                } else {
+                    alert('❌ Format invalide !\n\nExemples valides :\n- "1-30" (plage)\n- "15" (jour unique)\n- "tout" (tout effacer)');
+                    return;
+                }
             }
 
-            // Plage de jours (ex: "1-30") ou jour unique (ex: "15")
-            const rangMatch = reponse.match(/^(\d+)-(\d+)$/);
-            const singleMatch = reponse.match(/^(\d+)$/);
+            // Appel API pour effacer
+            try {
+                const response = await fetch('api/compteur.php?action=delete_days', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(requestBody)
+                });
 
-            if (rangMatch) {
-                const debut = parseInt(rangMatch[1]);
-                const fin = parseInt(rangMatch[2]);
+                const result = await response.json();
 
-                if (debut >= fin || debut < 1 || fin >= jourActuel) {
-                    alert('❌ Plage invalide ! Utilisez un format comme "1-30"');
-                    return;
+                if (result.success) {
+                    alert(`✅ ${result.message}`);
+                    await afficherPanneauCompteur();
+                } else {
+                    alert(`❌ Erreur: ${result.error}`);
                 }
-
-                if (confirm(`⚠️ Effacer les jours ${debut} à ${fin} ?\n\nCette action est irréversible !`)) {
-                    compteurJournalier.joursHistorique = compteurJournalier.joursHistorique.filter(
-                        jour => jour.numeroJour < debut || jour.numeroJour > fin
-                    );
-                    sauvegarderCompteurJournalier();
-                    afficherPanneauCompteur();
-                    alert(`✅ Jours ${debut} à ${fin} effacés avec succès !`);
-                }
-            } else if (singleMatch) {
-                const jourAEffacer = parseInt(singleMatch[1]);
-
-                if (jourAEffacer < 1 || jourAEffacer >= jourActuel) {
-                    alert(`❌ Jour invalide ! Choisissez entre 1 et ${jourActuel - 1}`);
-                    return;
-                }
-
-                if (confirm(`⚠️ Effacer le jour ${jourAEffacer} ?\n\nCette action est irréversible !`)) {
-                    compteurJournalier.joursHistorique = compteurJournalier.joursHistorique.filter(
-                        jour => jour.numeroJour !== jourAEffacer
-                    );
-                    sauvegarderCompteurJournalier();
-                    afficherPanneauCompteur();
-                    alert(`✅ Jour ${jourAEffacer} effacé avec succès !`);
-                }
-            } else {
-                alert('❌ Format invalide !\n\nExemples valides :\n- "1-30" (plage)\n- "15" (jour unique)\n- "tout" (tout effacer)');
+            } catch (error) {
+                console.error('❌ Erreur suppression:', error);
+                alert('❌ Erreur lors de la suppression');
             }
         }
 
@@ -1719,8 +1706,8 @@
                 gererAlertes();
 
                 // Gestion du compteur journalier
-                gererComptageZoneRouge(navires);
-                afficherPanneauCompteur();
+                await gererComptageZoneRouge(navires);
+                // afficherPanneauCompteur() est déjà appelé dans gererComptageZoneRouge
 
                 const naviresAfficher = filtrerNavires(navires);
                 let statusMessage = `${naviresAfficher.length} navires surveillés`;
@@ -1897,12 +1884,12 @@
         }
 
         // Initialisation
-        document.addEventListener('DOMContentLoaded', function() {
-            console.log('🌟 Initialisation de l\'application TrackShip - Version avec numérotation persistante');
-            
+        document.addEventListener('DOMContentLoaded', async function() {
+            console.log('🌟 Initialisation de l\'application TrackShip - Version avec numérotation persistante + MySQL');
+
             // Initialisation du système de numérotation RGPD
-            initialiserNumerotation();
-            
+            await initialiserNumerotation();
+
             initMap();
             
             window.addEventListener('beforeunload', function() {
