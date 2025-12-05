@@ -391,7 +391,10 @@
             if (!panneauElement || !compteurJournalier.jourActuel) return;
 
             const jourActuel = compteurJournalier.jourActuel;
-            const historique = [...compteurJournalier.joursHistorique].reverse().slice(0, 7); // 7 derniers jours
+            const historique = [...compteurJournalier.joursHistorique].reverse(); // TOUS les jours conservés
+
+            // Calculer le total cumulé
+            const totalCumule = historique.reduce((total, jour) => total + jour.compteur, 0) + jourActuel.compteur;
 
             let htmlHistorique = '';
             historique.forEach(jour => {
@@ -409,12 +412,98 @@
                     <div class="jour-label">Jour ${jourActuel.numeroJour} (Aujourd'hui)</div>
                     <div class="jour-compteur">${jourActuel.compteur} passage${jourActuel.compteur > 1 ? 's' : ''}</div>
                 </div>
+                <div class="compteur-total">
+                    <strong>Total cumulé:</strong> ${totalCumule} passages sur ${jourActuel.numeroJour} jour${jourActuel.numeroJour > 1 ? 's' : ''}
+                </div>
                 ${historique.length > 0 ? `
-                    <div class="compteur-historique">
+                    <div class="compteur-historique-toggle" onclick="toggleHistorique()">
+                        <span id="historique-icon">▶</span> Voir l'historique (${historique.length} jour${historique.length > 1 ? 's' : ''})
+                    </div>
+                    <div class="compteur-historique" id="historiqueContent" style="display: none;">
                         ${htmlHistorique}
                     </div>
                 ` : ''}
+                <button class="btn-effacer-historique" onclick="ouvrirMenuEffacement()">
+                    🗑️ Effacer des données
+                </button>
             `;
+        }
+
+        function toggleHistorique() {
+            const content = document.getElementById('historiqueContent');
+            const icon = document.getElementById('historique-icon');
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                icon.textContent = '▼';
+            } else {
+                content.style.display = 'none';
+                icon.textContent = '▶';
+            }
+        }
+
+        function ouvrirMenuEffacement() {
+            const jourActuel = compteurJournalier.jourActuel.numeroJour;
+            const message = `🗑️ Effacer l'historique des passages\n\n` +
+                `Entrez la période à effacer :\n\n` +
+                `Format : "1-30" (du jour 1 au jour 30)\n` +
+                `ou "50" (uniquement le jour 50)\n` +
+                `ou "tout" (effacer TOUT l'historique)\n\n` +
+                `Jours disponibles : 1 à ${jourActuel - 1}`;
+
+            const reponse = prompt(message);
+
+            if (!reponse) return; // Annulé
+
+            if (reponse.toLowerCase() === 'tout') {
+                if (confirm('⚠️ ATTENTION : Voulez-vous vraiment effacer TOUT l\'historique ?\n\nCette action est irréversible !')) {
+                    compteurJournalier.joursHistorique = [];
+                    sauvegarderCompteurJournalier();
+                    afficherPanneauCompteur();
+                    alert('✅ Tout l\'historique a été effacé !');
+                }
+                return;
+            }
+
+            // Plage de jours (ex: "1-30") ou jour unique (ex: "15")
+            const rangMatch = reponse.match(/^(\d+)-(\d+)$/);
+            const singleMatch = reponse.match(/^(\d+)$/);
+
+            if (rangMatch) {
+                const debut = parseInt(rangMatch[1]);
+                const fin = parseInt(rangMatch[2]);
+
+                if (debut >= fin || debut < 1 || fin >= jourActuel) {
+                    alert('❌ Plage invalide ! Utilisez un format comme "1-30"');
+                    return;
+                }
+
+                if (confirm(`⚠️ Effacer les jours ${debut} à ${fin} ?\n\nCette action est irréversible !`)) {
+                    compteurJournalier.joursHistorique = compteurJournalier.joursHistorique.filter(
+                        jour => jour.numeroJour < debut || jour.numeroJour > fin
+                    );
+                    sauvegarderCompteurJournalier();
+                    afficherPanneauCompteur();
+                    alert(`✅ Jours ${debut} à ${fin} effacés avec succès !`);
+                }
+            } else if (singleMatch) {
+                const jourAEffacer = parseInt(singleMatch[1]);
+
+                if (jourAEffacer < 1 || jourAEffacer >= jourActuel) {
+                    alert(`❌ Jour invalide ! Choisissez entre 1 et ${jourActuel - 1}`);
+                    return;
+                }
+
+                if (confirm(`⚠️ Effacer le jour ${jourAEffacer} ?\n\nCette action est irréversible !`)) {
+                    compteurJournalier.joursHistorique = compteurJournalier.joursHistorique.filter(
+                        jour => jour.numeroJour !== jourAEffacer
+                    );
+                    sauvegarderCompteurJournalier();
+                    afficherPanneauCompteur();
+                    alert(`✅ Jour ${jourAEffacer} effacé avec succès !`);
+                }
+            } else {
+                alert('❌ Format invalide !\n\nExemples valides :\n- "1-30" (plage)\n- "15" (jour unique)\n- "tout" (tout effacer)');
+            }
         }
 
         // Nettoyage RGPD - Conservation des numéros pour navires dans la zone (même à l'arrêt)

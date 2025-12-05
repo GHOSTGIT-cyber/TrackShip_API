@@ -897,6 +897,79 @@
             color: #dc3545;
         }
 
+        /* Total cumulé */
+        .compteur-total {
+            background: #f8f9fa;
+            padding: 12px;
+            border-radius: 6px;
+            margin: 15px 0;
+            text-align: center;
+            font-size: 14px;
+            color: #495057;
+            border: 1px solid #dee2e6;
+        }
+
+        .compteur-total strong {
+            color: #dc3545;
+            font-size: 16px;
+        }
+
+        /* Bouton toggle historique */
+        .compteur-historique-toggle {
+            background: linear-gradient(135deg, #007bff, #0056b3);
+            color: white;
+            padding: 12px;
+            border-radius: 6px;
+            margin: 10px 0;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: 600;
+            user-select: none;
+        }
+
+        .compteur-historique-toggle:hover {
+            background: linear-gradient(135deg, #0056b3, #003d82);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 123, 255, 0.3);
+        }
+
+        .compteur-historique-toggle:active {
+            transform: translateY(0);
+        }
+
+        .compteur-historique-toggle span {
+            display: inline-block;
+            margin-right: 8px;
+            transition: transform 0.3s ease;
+        }
+
+        /* Bouton effacer historique */
+        .btn-effacer-historique {
+            width: 100%;
+            background: linear-gradient(135deg, #dc3545, #c82333);
+            color: white;
+            border: none;
+            padding: 12px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3);
+        }
+
+        .btn-effacer-historique:hover {
+            background: linear-gradient(135deg, #c82333, #bd2130);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+        }
+
+        .btn-effacer-historique:active {
+            transform: translateY(0);
+        }
+
         /* Émetteurs terrestres */
         .navire-terrestre {
             border-left: 4px solid #ffc107 !important;
