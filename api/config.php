@@ -2,7 +2,7 @@
 // api/config.php
 // Configuration base de données Hostinger
 
-define('DB_HOST', 'fr-int-web1906.main-hosting.eu');
+define('DB_HOST', 'localhost');
 define('DB_NAME', 'u411940699_Trackship');
 define('DB_USER', 'u411940699_ghost');
 define('DB_PASS', 'Trackship6?');
