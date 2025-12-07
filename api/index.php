@@ -23,6 +23,11 @@ spl_autoload_register(function($class) {
     }
 });
 
+// Si ce fichier est inclus depuis un autre script (comme test-mvc.php), ne pas exécuter le routeur
+if (basename($_SERVER['SCRIPT_FILENAME']) !== 'index.php') {
+    return;
+}
+
 // Gestion des headers CORS globalement
 Response::setCorsHeaders();
 

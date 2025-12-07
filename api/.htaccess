@@ -1,18 +1,25 @@
 # api/.htaccess
-# Redirection de toutes les requêtes vers index.php (sauf fichiers existants)
+# Configuration compatible : anciens fichiers PHP + nouveau routeur MVC
 
 <IfModule mod_rewrite.c>
     RewriteEngine On
 
-    # Ne pas rediriger les fichiers qui existent réellement
+    # Permettre l'accès direct aux anciens fichiers PHP (compatibilité)
+    # Ces fichiers continueront de fonctionner en parallèle du nouveau système MVC
+    RewriteCond %{REQUEST_FILENAME} -f
+    RewriteCond %{REQUEST_FILENAME} \.(php)$ [NC]
+    RewriteRule ^ - [L]
+
+    # Ne pas rediriger les fichiers et dossiers qui existent
     RewriteCond %{REQUEST_FILENAME} !-f
     RewriteCond %{REQUEST_FILENAME} !-d
 
-    # Rediriger tout vers index.php en conservant les query strings
+    # Rediriger tout le reste vers index.php (nouveau routeur MVC)
+    # Cela permettra d'utiliser des routes propres comme /api/compteur
     RewriteRule ^(.*)$ index.php [QSA,L]
 </IfModule>
 
-# Headers CORS globaux (au cas où)
+# Headers CORS globaux
 <IfModule mod_headers.c>
     Header set Access-Control-Allow-Origin "*"
     Header set Access-Control-Allow-Methods "GET, POST, OPTIONS"
