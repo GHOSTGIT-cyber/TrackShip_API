@@ -1,12 +1,31 @@
 <?php
 // api/config.php
-// Configuration base de données Hostinger
+// Configuration base de données (auto-détection environnement)
 
-define('DB_HOST', 'localhost');
-define('DB_NAME', 'u411940699_Trackship');
-define('DB_USER', 'u411940699_ghost');
-define('DB_PASS', 'Trackship6?');
-define('DB_CHARSET', 'utf8mb4');
+// Détection de l'environnement
+$isLocal = (
+    $_SERVER['SERVER_NAME'] === 'localhost' ||
+    $_SERVER['SERVER_ADDR'] === '127.0.0.1' ||
+    $_SERVER['SERVER_ADDR'] === '::1' ||
+    strpos($_SERVER['HTTP_HOST'], 'localhost') !== false
+);
+
+// Configuration selon l'environnement
+if ($isLocal) {
+    // XAMPP Local
+    define('DB_HOST', 'localhost');
+    define('DB_NAME', 'u411940699_Trackship');
+    define('DB_USER', 'root');  // Utilisateur par défaut XAMPP
+    define('DB_PASS', '');       // Pas de mot de passe par défaut XAMPP
+    define('DB_CHARSET', 'utf8mb4');
+} else {
+    // Hostinger Production
+    define('DB_HOST', 'localhost');
+    define('DB_NAME', 'u411940699_Trackship');
+    define('DB_USER', 'u411940699_ghost');
+    define('DB_PASS', 'Trackship6?');
+    define('DB_CHARSET', 'utf8mb4');
+}
 
 /**
  * Fonction de connexion PDO avec gestion d'erreurs
