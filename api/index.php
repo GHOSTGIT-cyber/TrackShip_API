@@ -43,8 +43,8 @@ try {
     // ROUTAGE
     // ==========================================
 
-    // Route: /api/compteur.php ou /api/compteur
-    if (strpos($requestUri, '/api/compteur') !== false) {
+    // Route: /api/compteur.php ou /api/compteur ou /api/index.php (avec action)
+    if (strpos($requestUri, '/api/compteur') !== false || (strpos($requestUri, '/api/index.php') !== false && isset($_GET['action']))) {
         $controller = new CounterController();
         $action = $_GET['action'] ?? null;
 
