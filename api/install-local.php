@@ -49,11 +49,23 @@ if (!file_exists($sqlFile)) {
 
 $sql = file_get_contents($sqlFile);
 
+// Nettoyer le SQL (enlever les commentaires et lignes vides)
+$lines = explode("\n", $sql);
+$cleanedSql = '';
+foreach ($lines as $line) {
+    $line = trim($line);
+    // Ignorer les commentaires et lignes vides
+    if (empty($line) || strpos($line, '--') === 0) {
+        continue;
+    }
+    $cleanedSql .= $line . ' ';
+}
+
 // Séparer les requêtes SQL (par point-virgule)
 $statements = array_filter(
-    array_map('trim', explode(';', $sql)),
+    array_map('trim', explode(';', $cleanedSql)),
     function($stmt) {
-        return !empty($stmt) && strpos($stmt, '--') !== 0;
+        return !empty($stmt) && stripos($stmt, 'SELECT') !== 0; // Ignorer les SELECT
     }
 );
 
@@ -66,16 +78,29 @@ foreach ($statements as $statement) {
     try {
         $pdo->exec($statement);
         $success++;
+
+        // Afficher quelle requête a été exécutée
+        if (stripos($statement, 'CREATE TABLE') !== false) {
+            preg_match('/CREATE TABLE.*?(\w+)\s*\(/i', $statement, $matches);
+            if (isset($matches[1])) {
+                echo "<p style='color: green;'>✅ Table créée: {$matches[1]}</p>";
+            }
+        } elseif (stripos($statement, 'INSERT') !== false) {
+            echo "<p style='color: green;'>✅ Données insérées</p>";
+        }
     } catch (PDOException $e) {
-        echo "<p style='color: orange;'>⚠️ Requête ignorée: " . substr($statement, 0, 50) . "...</p>";
+        echo "<p style='color: red;'>❌ Erreur: " . $e->getMessage() . "</p>";
+        echo "<p style='color: gray;'>Requête: " . substr($statement, 0, 100) . "...</p>";
         $errors++;
     }
 }
 
-echo "<p style='color: green;'>✅ Requêtes exécutées: $success</p>";
+echo "<hr>";
+echo "<p><strong>Résumé: $success requêtes réussies";
 if ($errors > 0) {
-    echo "<p style='color: orange;'>⚠️ Requêtes ignorées: $errors (probablement normales)</p>";
+    echo ", $errors erreurs";
 }
+echo "</strong></p>";
 
 // Vérifier les tables créées
 echo "<h2>Vérification des tables...</h2>";
