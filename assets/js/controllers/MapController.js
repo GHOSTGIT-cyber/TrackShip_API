@@ -134,18 +134,32 @@ export class MapController {
         const color = CONFIG.MARKER_COLORS[analysis.status];
         const shipNumber = gdprService.getShipNumber(ship.trackId);
 
-        // Utiliser une flèche SVG pour indiquer la direction
-        const rotation = ship.cog || 0; // Course over ground
+        // Déterminer le type d'icône selon si émetteur terrestre ou navire
+        const isLandEmitter = analysis.isLandEmitter;
+        const rotation = ship.cog || 0;
 
-        const icon = L.divIcon({
-            className: 'ship-marker',
-            html: `
+        let iconHtml = '';
+        if (isLandEmitter) {
+            // Icône antenne 📡 pour émetteurs terrestres
+            iconHtml = `
+                <div style="font-size: 28px; filter: drop-shadow(0 0 3px rgba(0,0,0,0.7));">
+                    📡
+                </div>
+            `;
+        } else {
+            // Icône flèche SVG pour navires (avec rotation selon cap)
+            iconHtml = `
                 <svg width="24" height="24" viewBox="0 0 24 24" style="transform: rotate(${rotation}deg); filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));">
                     <path d="M12 2 L5 20 L12 16 L19 20 Z" fill="${color}" stroke="white" stroke-width="1.5"/>
                 </svg>
-            `,
-            iconSize: [24, 24],
-            iconAnchor: [12, 12]
+            `;
+        }
+
+        const icon = L.divIcon({
+            className: 'ship-marker',
+            html: iconHtml,
+            iconSize: [28, 28],
+            iconAnchor: [14, 14]
         });
 
         const marker = L.marker([ship.lat, ship.lon], { icon })

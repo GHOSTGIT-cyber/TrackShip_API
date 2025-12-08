@@ -172,4 +172,101 @@ export class NotificationService {
     static alert(message) {
         window.alert(message);
     }
+
+    /**
+     * Joue une alarme sonore
+     * @param {number} frequency - Fréquence du son en Hz (défaut: 800)
+     * @param {number} duration - Durée en secondes (défaut: 0.5)
+     */
+    static playAlarm(frequency = 800, duration = 0.5) {
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+
+            oscillator.frequency.setValueAtTime(frequency, audioContext.currentTime);
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+
+            oscillator.start();
+            oscillator.stop(audioContext.currentTime + duration);
+
+            console.log('🔊 Alarme sonore déclenchée');
+        } catch (e) {
+            console.warn('🔇 Alarme sonore non disponible:', e);
+        }
+    }
+
+    /**
+     * Affiche une bannière d'alerte rouge en haut de page
+     * @param {Object} ship - Navire en alerte
+     * @param {Object} analysis - Résultats d'analyse du navire
+     * @param {string} shipNumber - Numéro RGPD du navire
+     */
+    static showRedAlertBanner(ship, analysis, shipNumber = null) {
+        // Supprimer ancienne bannière si existe
+        const existing = document.getElementById('banniereAlerte');
+        if (existing) existing.remove();
+
+        const banner = document.createElement('div');
+        banner.id = 'banniereAlerte';
+        banner.className = 'banniere-alerte';
+        banner.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #dc3545;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 18px;
+            z-index: 9999;
+            animation: pulse 1s infinite;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        `;
+
+        const shipName = ship.fairwayName || ship.name || 'Inconnu';
+        const distance = Math.round(analysis.distance);
+        const speed = analysis.speed ? analysis.speed.toFixed(1) : 'N/A';
+        const course = analysis.course ? Math.round(analysis.course) : 'N/A';
+        const numberText = shipNumber ? `#${shipNumber} ` : '';
+
+        banner.innerHTML = `
+            🚨 ALERTE ZONE 1KM 🚨 - Navire ${numberText}"${shipName}" en mouvement !
+            Distance: ${distance}m - Vitesse: ${speed} kn - Cap: ${course}°
+        `;
+
+        document.body.insertBefore(banner, document.body.firstChild);
+
+        // Auto-suppression après 10 secondes
+        setTimeout(() => {
+            if (document.getElementById('banniereAlerte')) {
+                banner.style.animation = 'fadeOut 0.5s ease-out';
+                setTimeout(() => banner.remove(), 500);
+            }
+        }, 10000);
+
+        // Ajouter animation CSS si pas déjà présent
+        if (!document.getElementById('banner-animation')) {
+            const style = document.createElement('style');
+            style.id = 'banner-animation';
+            style.textContent = `
+                @keyframes pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.85; }
+                }
+                @keyframes fadeOut {
+                    from { opacity: 1; transform: translateY(0); }
+                    to { opacity: 0; transform: translateY(-20px); }
+                }
+            `;
+            document.head.appendChild(style);
+        }
+
+        console.log('🚨 Bannière d\'alerte rouge affichée pour:', shipName);
+    }
 }

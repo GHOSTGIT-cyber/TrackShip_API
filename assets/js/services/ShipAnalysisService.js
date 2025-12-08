@@ -51,9 +51,18 @@ export class ShipAnalysisService {
      * @returns {boolean}
      */
     static isShipConform(ship, isWater, isLandEmitter) {
-        // TOUS les navires sont considérés comme conformes (même sur terre = antennes radio)
-        // On affiche tout ce qui est détecté par l'API EuRIS
-        return true;
+        // TOUS les navires détectés sont affichés sur la carte
+        // MAIS on maintient une distinction conforme/non-conforme pour les listes
+
+        // Critères de conformité des données
+        const hasSpeed = ship.sog !== null && ship.sog !== undefined;
+        const hasName = ship.fairwayName && ship.fairwayName.trim() !== '';
+        const hasLength = ship.length && parseFloat(ship.length) > 0;
+        const hasMMSI = ship.mmsi && ship.mmsi.toString().length >= 6;
+
+        // Un navire est conforme s'il a au moins un nom ET un MMSI valide
+        // (Émetteurs terrestres et navires sur eau sont tous considérés conformes s'ils ont ces données)
+        return hasName && hasMMSI;
     }
 
     /**
@@ -65,8 +74,14 @@ export class ShipAnalysisService {
      * @returns {boolean}
      */
     static isNonConformMoving(ship, isWater, isLandEmitter, isMoving) {
-        // Non conforme (pas sur eau OU émetteur terrestre) MAIS en mouvement
-        return (!isWater || isLandEmitter) && isMoving;
+        // Non conforme = manque des données critiques ET est en mouvement
+        const hasSpeed = ship.sog !== null && ship.sog !== undefined && parseFloat(ship.sog) > 0.5;
+        const manqueNom = !ship.fairwayName || ship.fairwayName.trim() === '';
+        const manqueMMSI = !ship.mmsi || ship.mmsi.toString().length < 6;
+        const manqueLongueur = !ship.length || parseFloat(ship.length) <= 0;
+
+        // Non conforme en mouvement = manque données ET peut bouger
+        return hasSpeed && (manqueNom || manqueMMSI || manqueLongueur);
     }
 
     /**

@@ -221,15 +221,18 @@ class TrackShipApp {
             // 10. Mettre à jour les listes de navires
             this.updateShipLists(filteredShips, analysisResults);
 
-            // 11. Mettre à jour le compteur
+            // 11. Gérer les alertes zone rouge (alarme + bannière)
+            this.handleRedZoneAlerts(filteredShips, analysisResults);
+
+            // 12. Mettre à jour le compteur
             await this.updateCounterDisplay();
 
-            // 12. Mettre à jour la status bar
+            // 13. Mettre à jour la status bar
             const totalShips = filteredShips.length;
             const numberedShips = this.gdprService.getShipCount();
             this.statusBarView.update(totalShips, numberedShips);
 
-            // 13. Ajuster le taux de rafraîchissement si alerte
+            // 14. Ajuster le taux de rafraîchissement si alerte
             this.adjustRefreshRate(analysisResults);
 
             Logger.timeEnd('updateData');
@@ -359,6 +362,45 @@ class TrackShipApp {
         this.shipListView.renderConformes(conformes, this.gdprService);
         this.shipListView.renderNonConformes(nonConformes, this.gdprService);
         this.shipListView.renderPanneauAttention(nonConformes, this.gdprService);
+    }
+
+    /**
+     * Gère les alertes et notifications pour navires en zone rouge
+     * @param {Array} ships
+     * @param {Map} analysisResults
+     */
+    handleRedZoneAlerts(ships, analysisResults) {
+        if (!this.redZoneShips) {
+            this.redZoneShips = new Set();
+        }
+
+        const currentRedZoneShips = new Set();
+
+        // Identifier navires en zone rouge ET en mouvement
+        ships.forEach(ship => {
+            const analysis = analysisResults.get(ship.trackId);
+            if (!analysis) return;
+
+            if (analysis.distance <= CONFIG.ZONES.ZONE_ALERTE && analysis.isMoving) {
+                currentRedZoneShips.add(ship.trackId);
+
+                // Nouveau navire entrant en zone rouge ?
+                if (!this.redZoneShips.has(ship.trackId)) {
+                    const shipNumber = this.gdprService.getShipNumber(ship.trackId);
+
+                    // Déclencher l'alarme sonore
+                    NotificationService.playAlarm();
+
+                    // Afficher la bannière d'alerte
+                    NotificationService.showRedAlertBanner(ship, analysis, shipNumber);
+
+                    Logger.warn(`🚨 ALERTE ROUGE: ${ship.fairwayName || 'Navire inconnu'} en zone ≤1km`);
+                }
+            }
+        });
+
+        // Mettre à jour la liste des navires en zone rouge
+        this.redZoneShips = currentRedZoneShips;
     }
 
     /**
