@@ -1,0 +1,53 @@
+# .htaccess pour devtrackship.bakabi.fr (DÉVELOPPEMENT)
+# Fichier à renommer en .htaccess sur le serveur de développement
+
+# Page d'accueil
+DirectoryIndex index.html
+
+# Variable d'environnement
+SetEnv APP_ENV development
+
+# Sécurité - Empêcher l'accès aux fichiers sensibles
+<FilesMatch "^(database\.php|\.env|composer\.(json|lock)|package(-lock)?\.json)$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# Bloquer l'accès aux dossiers sensibles
+<DirectoryMatch "^(.*/)?(\.(git|svn)$)">
+    Order allow,deny
+    Deny from all
+</DirectoryMatch>
+
+# AUTORISER l'accès aux dossiers .notes et .claude pour debug
+# (Commentez ces lignes si vous voulez les bloquer)
+
+# Afficher les erreurs en mode dev
+php_flag display_errors on
+php_flag display_startup_errors on
+php_value error_reporting E_ALL
+
+# Logs d'erreurs
+php_flag log_errors on
+php_value error_log /home/username/logs/php_errors_dev.log
+
+# Headers de debug
+<IfModule mod_headers.c>
+    Header set X-Environment "development"
+    Header set X-Content-Type-Options "nosniff"
+    Header set X-Frame-Options "SAMEORIGIN"
+</IfModule>
+
+# Désactiver le cache en dev
+<IfModule mod_headers.c>
+    Header set Cache-Control "no-cache, no-store, must-revalidate"
+    Header set Pragma "no-cache"
+    Header set Expires "0"
+</IfModule>
+
+# CORS plus permissif en dev (si nécessaire)
+<IfModule mod_headers.c>
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, POST, OPTIONS"
+    Header set Access-Control-Allow-Headers "Content-Type, Authorization"
+</IfModule>

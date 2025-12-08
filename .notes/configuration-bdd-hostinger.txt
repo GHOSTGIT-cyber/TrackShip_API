@@ -1,0 +1,189 @@
+CONFIGURATION BDD POUR HOSTINGER
+
+═══════════════════════════════════════════════════════════════
+
+1. FICHIER DE CONFIGURATION À CRÉER
+
+   Créer: /config/database.php (ou .env)
+
+   <?php
+   // Configuration BDD pour production Hostinger
+
+   // ENVIRONNEMENT
+   define('ENVIRONMENT', getenv('APP_ENV') ?: 'production');
+
+   // Configuration selon environnement
+   if (ENVIRONMENT === 'development') {
+       // BDD pour devtrackship.bakabi.fr
+       define('DB_HOST', 'localhost');
+       define('DB_NAME', 'trackship_dev');
+       define('DB_USER', 'trackship_dev');
+       define('DB_PASS', 'votre_password_dev');
+   } else {
+       // BDD pour trackship.bakabi.fr (production)
+       define('DB_HOST', 'localhost');
+       define('DB_NAME', 'trackship_prod');
+       define('DB_USER', 'trackship_prod');
+       define('DB_PASS', 'votre_password_prod');
+   }
+
+   define('DB_CHARSET', 'utf8mb4');
+   ?>
+
+═══════════════════════════════════════════════════════════════
+
+2. VARIABLES D'ENVIRONNEMENT SUR HOSTINGER
+
+   A. trackship.bakabi.fr (production - branche main)
+      - Dans cPanel > Variables d'environnement
+      - Ajouter: APP_ENV = production
+      - Fichier .htaccess:
+        SetEnv APP_ENV production
+
+   B. devtrackship.bakabi.fr (dev - branche mvc-refactor)
+      - Dans cPanel > Variables d'environnement
+      - Ajouter: APP_ENV = development
+      - Fichier .htaccess:
+        SetEnv APP_ENV development
+
+═══════════════════════════════════════════════════════════════
+
+3. CRÉER LES DEUX BASES DE DONNÉES
+
+   Sur Hostinger cPanel:
+
+   A. Base production (trackship_prod)
+      - Nom: trackship_prod
+      - User: trackship_prod
+      - Importer structure depuis la BDD actuelle
+
+   B. Base développement (trackship_dev)
+      - Nom: trackship_dev
+      - User: trackship_dev
+      - Importer structure identique
+      - Données de test séparées
+
+═══════════════════════════════════════════════════════════════
+
+4. MODIFIER LES FICHIERS PHP EXISTANTS
+
+   Dans: api/compteur.php
+
+   Remplacer la connexion BDD par:
+
+   <?php
+   require_once __DIR__ . '/../config/database.php';
+
+   try {
+       $pdo = new PDO(
+           "mysql:host=" . DB_HOST . ";dbname=" . DB_NAME . ";charset=" . DB_CHARSET,
+           DB_USER,
+           DB_PASS,
+           [
+               PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+               PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
+           ]
+       );
+   } catch (PDOException $e) {
+       die(json_encode(['error' => 'Connexion BDD échouée']));
+   }
+   ?>
+
+═══════════════════════════════════════════════════════════════
+
+5. FICHIERS .htaccess POUR CHAQUE ENVIRONNEMENT
+
+   A. trackship.bakabi.fr/.htaccess
+      DirectoryIndex index.html
+      SetEnv APP_ENV production
+
+      # Sécurité
+      <Files "database.php">
+          Order allow,deny
+          Deny from all
+      </Files>
+
+   B. devtrackship.bakabi.fr/.htaccess
+      DirectoryIndex index.html
+      SetEnv APP_ENV development
+
+      # Sécurité
+      <Files "database.php">
+          Order allow,deny
+          Deny from all
+      </Files>
+
+      # Mode debug (optionnel)
+      php_flag display_errors on
+      php_value error_reporting E_ALL
+
+═══════════════════════════════════════════════════════════════
+
+6. DÉPLOIEMENT AUTO-GIT SUR HOSTINGER
+
+   Créer webhook Git dans cPanel pour chaque sous-domaine:
+
+   A. trackship.bakabi.fr
+      Script: /home/username/deploy-main.sh
+
+      #!/bin/bash
+      cd /home/username/public_html/trackship
+      git fetch origin main
+      git reset --hard origin/main
+      echo "$(date): Déploiement main terminé" >> deploy.log
+
+   B. devtrackship.bakabi.fr
+      Script: /home/username/deploy-mvc.sh
+
+      #!/bin/bash
+      cd /home/username/public_html/devtrackship
+      git fetch origin mvc-refactor
+      git reset --hard origin/mvc-refactor
+      echo "$(date): Déploiement mvc-refactor terminé" >> deploy.log
+
+═══════════════════════════════════════════════════════════════
+
+7. WORKFLOW COMPLET
+
+   Développement local (XAMPP):
+   1. Travailler sur branche mvc-refactor
+   2. git add .
+   3. git commit -m "Description"
+   4. git push origin mvc-refactor
+
+   Sur Hostinger:
+   - devtrackship.bakabi.fr se met à jour automatiquement
+   - Utilise la BDD trackship_dev
+   - Vous testez la version MVC
+
+   Quand c'est stable:
+   1. git checkout main
+   2. git merge mvc-refactor
+   3. git push origin main
+
+   Sur Hostinger:
+   - trackship.bakabi.fr se met à jour
+   - Utilise la BDD trackship_prod
+   - Site principal mis à jour
+
+═══════════════════════════════════════════════════════════════
+
+8. COMMANDES GIT ESSENTIELLES
+
+   # Travailler sur version dev (MVC)
+   git checkout mvc-refactor
+   git add .
+   git commit -m "Modifications MVC"
+   git push origin mvc-refactor
+   → Déploie sur devtrackship.bakabi.fr
+
+   # Mettre à jour le site principal
+   git checkout main
+   git merge mvc-refactor
+   git push origin main
+   → Déploie sur trackship.bakabi.fr
+
+   # Revenir au dev
+   git checkout mvc-refactor
+
+═══════════════════════════════════════════════════════════════

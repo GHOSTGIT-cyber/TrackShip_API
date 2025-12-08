@@ -1,0 +1,278 @@
+GUIDE COMPLET : DÉPLOIEMENT TRACKSHIP SUR HOSTINGER
+
+═══════════════════════════════════════════════════════════════
+PARTIE 1 : PRÉPARATION DES BRANCHES GIT
+═══════════════════════════════════════════════════════════════
+
+1. STRUCTURE DES BRANCHES
+
+   main (production)
+   └── trackship.bakabi.fr
+       └── Fichier principal: index.html (version originale)
+       └── BDD: trackship_prod
+
+   mvc-refactor (développement)
+   └── devtrackship.bakabi.fr
+       └── Fichier principal: index.html (= index-mvc-CORRECT.html)
+       └── BDD: trackship_dev
+
+2. COMMANDES GIT LOCALES (DÉJÀ FAIT)
+
+   ✓ Branche mvc-refactor créée
+   ✓ Fichiers MVC ajoutés
+
+   Il reste à faire:
+
+   a) Commit sur mvc-refactor:
+      git add .
+      git commit -m "Version MVC refactorisée avec config multi-env"
+
+   b) Pousser vers GitHub/GitLab:
+      git push origin mvc-refactor
+      git push origin main
+
+═══════════════════════════════════════════════════════════════
+PARTIE 2 : CONFIGURATION HOSTINGER
+═══════════════════════════════════════════════════════════════
+
+3. CRÉER LES SOUS-DOMAINES
+
+   A. Sous-domaine production (EXISTANT)
+      - Domaine: trackship.bakabi.fr
+      - Dossier: /home/username/public_html/trackship
+      - Branche Git: main
+
+   B. Sous-domaine développement (NOUVEAU)
+      - Dans cPanel > Sous-domaines
+      - Créer: devtrackship.bakabi.fr
+      - Dossier: /home/username/public_html/devtrackship
+      - Branche Git: mvc-refactor
+
+4. CRÉER LES BASES DE DONNÉES
+
+   Dans cPanel > MySQL Databases:
+
+   A. Base de données production
+      - Nom: username_trackship_prod
+      - Créer utilisateur: username_trackprod
+      - Mot de passe: [GÉNÉRER UN MOT DE PASSE FORT]
+      - Associer utilisateur à la BDD (tous privilèges)
+
+   B. Base de données développement
+      - Nom: username_trackship_dev
+      - Créer utilisateur: username_trackdev
+      - Mot de passe: [GÉNÉRER UN MOT DE PASSE FORT]
+      - Associer utilisateur à la BDD (tous privilèges)
+
+   C. Importer la structure
+      - phpMyAdmin > trackship_prod > Importer
+      - Uploader le dump de votre BDD actuelle
+      - Répéter pour trackship_dev
+
+5. CONFIGURER GIT SUR HOSTINGER
+
+   Via SSH (Terminal Hostinger):
+
+   A. Se connecter en SSH
+      ssh username@trackship.bakabi.fr
+
+   B. Configuration Git (si première fois)
+      git config --global user.name "Votre Nom"
+      git config --global user.email "votre@email.com"
+
+   C. Cloner le repo dans le dossier production
+      cd /home/username/public_html
+      git clone https://github.com/VOTRE_USERNAME/TrackShip_API.git trackship
+      cd trackship
+      git checkout main
+
+   D. Cloner le repo dans le dossier développement
+      cd /home/username/public_html
+      git clone https://github.com/VOTRE_USERNAME/TrackShip_API.git devtrackship
+      cd devtrackship
+      git checkout mvc-refactor
+
+6. CONFIGURER LES FICHIERS .htaccess
+
+   A. Sur trackship.bakabi.fr (production)
+      cd /home/username/public_html/trackship
+      cp .htaccess.production .htaccess
+      nano .htaccess
+      # Vérifier que APP_ENV = production
+
+   B. Sur devtrackship.bakabi.fr (dev)
+      cd /home/username/public_html/devtrackship
+      cp .htaccess.development .htaccess
+      nano .htaccess
+      # Vérifier que APP_ENV = development
+
+7. CONFIGURER database.php
+
+   A. Éditer le fichier de config
+      nano /home/username/public_html/trackship/config/database.php
+
+   B. Remplacer les placeholders:
+      - DB_NAME: 'username_trackship_prod'
+      - DB_USER: 'username_trackprod'
+      - DB_PASS: 'le_mot_de_passe_généré'
+
+   C. Répéter pour le dev:
+      nano /home/username/public_html/devtrackship/config/database.php
+      - DB_NAME: 'username_trackship_dev'
+      - DB_USER: 'username_trackdev'
+      - DB_PASS: 'le_mot_de_passe_dev_généré'
+
+8. VÉRIFIER LES PERMISSIONS
+
+   chmod 755 /home/username/public_html/trackship
+   chmod 755 /home/username/public_html/devtrackship
+   chmod 644 /home/username/public_html/*/config/database.php
+   chmod 644 /home/username/public_html/*/.htaccess
+
+═══════════════════════════════════════════════════════════════
+PARTIE 3 : AUTOMATISER LE DÉPLOIEMENT
+═══════════════════════════════════════════════════════════════
+
+9. CRÉER LES SCRIPTS DE DÉPLOIEMENT
+
+   A. Script pour production
+      nano /home/username/deploy-main.sh
+
+      Contenu:
+      #!/bin/bash
+      echo "$(date): Début déploiement main" >> /home/username/deploy.log
+      cd /home/username/public_html/trackship
+      git fetch origin main
+      git reset --hard origin/main
+      echo "$(date): Déploiement main terminé" >> /home/username/deploy.log
+
+   B. Script pour développement
+      nano /home/username/deploy-mvc.sh
+
+      Contenu:
+      #!/bin/bash
+      echo "$(date): Début déploiement mvc-refactor" >> /home/username/deploy.log
+      cd /home/username/public_html/devtrackship
+      git fetch origin mvc-refactor
+      git reset --hard origin/mvc-refactor
+      echo "$(date): Déploiement mvc-refactor terminé" >> /home/username/deploy.log
+
+   C. Rendre les scripts exécutables
+      chmod +x /home/username/deploy-main.sh
+      chmod +x /home/username/deploy-mvc.sh
+
+10. CONFIGURER WEBHOOK GIT (OPTIONNEL)
+
+    Si vous utilisez GitHub:
+    - Settings > Webhooks > Add webhook
+    - Payload URL: https://trackship.bakabi.fr/webhook.php
+    - Content type: application/json
+    - Secret: [GÉNÉRER UN SECRET]
+    - Events: Just the push event
+
+    Créer webhook.php dans chaque dossier pour déclencher le script
+
+═══════════════════════════════════════════════════════════════
+PARTIE 4 : WORKFLOW QUOTIDIEN
+═══════════════════════════════════════════════════════════════
+
+11. TRAVAILLER SUR LA VERSION DEV (MVC)
+
+    Sur votre ordinateur local:
+
+    a) S'assurer d'être sur mvc-refactor
+       git checkout mvc-refactor
+
+    b) Faire vos modifications
+       [Éditer les fichiers assets/js/...]
+
+    c) Tester localement sur XAMPP
+       http://localhost/TrackShip_API/index-mvc-CORRECT.html
+
+    d) Commiter et pousser
+       git add .
+       git commit -m "Description des modifications"
+       git push origin mvc-refactor
+
+    e) Déployer sur Hostinger (si pas de webhook auto)
+       ssh username@trackship.bakabi.fr
+       /home/username/deploy-mvc.sh
+
+    f) Tester sur devtrackship.bakabi.fr
+
+12. MERGER VERS PRODUCTION (QUAND STABLE)
+
+    a) S'assurer que la version dev fonctionne
+       → Tester sur https://devtrackship.bakabi.fr
+
+    b) Merger vers main
+       git checkout main
+       git merge mvc-refactor
+       git push origin main
+
+    c) Déployer sur production
+       ssh username@trackship.bakabi.fr
+       /home/username/deploy-main.sh
+
+    d) Vérifier sur https://trackship.bakabi.fr
+
+    e) Revenir sur dev pour continuer le travail
+       git checkout mvc-refactor
+
+═══════════════════════════════════════════════════════════════
+PARTIE 5 : COMMANDES RAPIDES
+═══════════════════════════════════════════════════════════════
+
+COMMIT UNIQUEMENT SUR DEV (pas sur production):
+   git checkout mvc-refactor
+   git add .
+   git commit -m "Modifications"
+   git push origin mvc-refactor
+
+COMMIT SUR PRODUCTION (après avoir testé sur dev):
+   git checkout main
+   git merge mvc-refactor
+   git push origin main
+
+VOIR SUR QUELLE BRANCHE VOUS ÊTES:
+   git branch
+
+ANNULER DES MODIFICATIONS NON-COMMITÉES:
+   git checkout -- .
+
+VOIR L'HISTORIQUE:
+   git log --oneline --graph --all
+
+═══════════════════════════════════════════════════════════════
+PARTIE 6 : VÉRIFICATIONS POST-DÉPLOIEMENT
+═══════════════════════════════════════════════════════════════
+
+A. Vérifier la connexion BDD
+   https://devtrackship.bakabi.fr/api/compteur.php?action=get_current
+   → Doit retourner du JSON (pas d'erreur)
+
+B. Vérifier l'affichage de la carte
+   https://devtrackship.bakabi.fr
+   → La carte doit s'afficher avec les 3 cercles
+
+C. Vérifier les logs
+   ssh username@trackship.bakabi.fr
+   tail -f /home/username/logs/php_errors_dev.log
+
+═══════════════════════════════════════════════════════════════
+RÉSUMÉ SIMPLIFIÉ
+═══════════════════════════════════════════════════════════════
+
+DÉVELOPPEMENT:
+1. git checkout mvc-refactor
+2. [Faire modifications]
+3. git add . && git commit -m "Message" && git push origin mvc-refactor
+4. Tester sur devtrackship.bakabi.fr
+
+MISE EN PRODUCTION:
+1. git checkout main
+2. git merge mvc-refactor
+3. git push origin main
+4. Vérifier sur trackship.bakabi.fr
+
+═══════════════════════════════════════════════════════════════
