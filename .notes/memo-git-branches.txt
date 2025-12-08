@@ -1,0 +1,66 @@
+MÉMO RAPIDE : TRAVAILLER AVEC LES 2 BRANCHES
+
+═══════════════════════════════════════════════════════════════
+CONFIGURATION ACTUELLE
+═══════════════════════════════════════════════════════════════
+
+Branche main (production)
+└── trackship.bakabi.fr
+    └── Version originale avec index.html
+    └── BDD: trackship_prod
+
+Branche mvc-refactor (développement) ✓ COMMIT FAIT
+└── devtrackship.bakabi.fr (À CRÉER)
+    └── Version MVC avec index-mvc-CORRECT.html → index.html
+    └── BDD: trackship_dev (À CRÉER)
+
+═══════════════════════════════════════════════════════════════
+COMMANDES ESSENTIELLES
+═══════════════════════════════════════════════════════════════
+
+VOIR SUR QUELLE BRANCHE VOUS ÊTES:
+   git branch
+   (étoile * = branche actuelle)
+
+BASCULER SUR LA BRANCHE DEV:
+   git checkout mvc-refactor
+
+BASCULER SUR LA BRANCHE PROD:
+   git checkout main
+
+MODIFIER UNIQUEMENT LE DEV (PAS LA PROD):
+   1. git checkout mvc-refactor
+   2. [Faire vos modifications]
+   3. git add .
+   4. git commit -m "Description"
+   5. git push origin mvc-refactor
+
+METTRE LA PROD À JOUR AVEC LE DEV:
+   1. git checkout main
+   2. git merge mvc-refactor
+   3. git push origin main
+
+═══════════════════════════════════════════════════════════════
+PROCHAINES ÉTAPES SUR HOSTINGER
+═══════════════════════════════════════════════════════════════
+
+1. Créer le sous-domaine devtrackship.bakabi.fr
+
+2. Créer les 2 bases de données:
+   - trackship_prod (pour trackship.bakabi.fr)
+   - trackship_dev (pour devtrackship.bakabi.fr)
+
+3. Cloner le repo Git dans 2 dossiers:
+   - /public_html/trackship (branche main)
+   - /public_html/devtrackship (branche mvc-refactor)
+
+4. Configurer database.php avec les vrais identifiants BDD
+
+5. Copier les bons fichiers .htaccess:
+   - .htaccess.production → .htaccess (sur trackship)
+   - .htaccess.development → .htaccess (sur devtrackship)
+
+Voir le guide complet dans:
+   .notes/guide-deploiement-hostinger.txt
+
+═══════════════════════════════════════════════════════════════
