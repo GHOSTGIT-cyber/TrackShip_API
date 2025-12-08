@@ -1,18 +1,20 @@
 <?php
-// config/database.php
-// Configuration base de données multi-environnement
+// config/database-readonly.php
+// Configuration LECTURE SEULE pour le développement
+// À utiliser si vous voulez que le dev affiche les données de prod sans pouvoir les modifier
 
 // Détection automatique de l'environnement
 $environment = getenv('APP_ENV') ?: 'production';
 
 // Configuration selon environnement
 if ($environment === 'development' || $environment === 'dev') {
-    // Environnement développement (devtrackship.bakabi.fr)
+    // DEV EN LECTURE SEULE SUR PROD
     define('DB_HOST', 'localhost');
-    define('DB_NAME', 'u411940699_devtrackship');
-    define('DB_USER', 'u411940699_ghostdev');
-    define('DB_PASS', '$t1B97ydK');
+    define('DB_NAME', 'trackship_prod');  // MÊME BDD que production
+    define('DB_USER', 'trackship_readonly'); // User avec SELECT only
+    define('DB_PASS', 'MOT_DE_PASSE_READONLY_A_CONFIGURER');
     define('DEBUG_MODE', true);
+    define('READ_ONLY_MODE', true); // Bloque les écritures
 } elseif ($environment === 'local') {
     // Environnement local (XAMPP)
     define('DB_HOST', 'localhost');
@@ -20,14 +22,15 @@ if ($environment === 'development' || $environment === 'dev') {
     define('DB_USER', 'root');
     define('DB_PASS', '');
     define('DEBUG_MODE', true);
+    define('READ_ONLY_MODE', false);
 } else {
     // Environnement production (trackship.bakabi.fr)
-    // TODO: Créer la BDD production sur Hostinger
     define('DB_HOST', 'localhost');
-    define('DB_NAME', 'u411940699_trackship'); // À vérifier
-    define('DB_USER', 'u411940699_trackprod'); // À créer
+    define('DB_NAME', 'trackship_prod');
+    define('DB_USER', 'trackship_prod');
     define('DB_PASS', 'MOT_DE_PASSE_PROD_A_CONFIGURER');
     define('DEBUG_MODE', false);
+    define('READ_ONLY_MODE', false);
 }
 
 define('DB_CHARSET', 'utf8mb4');
@@ -56,11 +59,12 @@ function getDatabase() {
 
             if (DEBUG_MODE) {
                 error_log(sprintf(
-                    "Connexion BDD établie: %s@%s/%s (env: %s)",
+                    "Connexion BDD établie: %s@%s/%s (env: %s, readonly: %s)",
                     DB_USER,
                     DB_HOST,
                     DB_NAME,
-                    getenv('APP_ENV') ?: 'production'
+                    getenv('APP_ENV') ?: 'production',
+                    READ_ONLY_MODE ? 'OUI' : 'NON'
                 ));
             }
         } catch (PDOException $e) {
@@ -80,4 +84,43 @@ function getDatabase() {
 
     return $pdo;
 }
+
+/**
+ * Vérifie si une opération d'écriture est autorisée
+ * @param string $action - L'action demandée
+ * @return bool
+ */
+function isWriteAllowed($action = '') {
+    if (!defined('READ_ONLY_MODE') || READ_ONLY_MODE !== true) {
+        return true;
+    }
+
+    // Actions d'écriture bloquées en mode readonly
+    $writeActions = [
+        'update_zone_rouge',
+        'increment',
+        'delete_day',
+        'reset_counter'
+    ];
+
+    if (in_array($action, $writeActions)) {
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode([
+            'error' => 'Mode lecture seule',
+            'message' => 'Les modifications sont désactivées en environnement de développement',
+            'action_blocked' => $action
+        ]);
+        exit;
+    }
+
+    return true;
+}
+
+// Commandes SQL pour créer le user readonly sur Hostinger:
+/*
+CREATE USER 'trackship_readonly'@'localhost' IDENTIFIED BY 'VOTRE_PASSWORD_FORT';
+GRANT SELECT ON trackship_prod.* TO 'trackship_readonly'@'localhost';
+FLUSH PRIVILEGES;
+*/
 ?>
