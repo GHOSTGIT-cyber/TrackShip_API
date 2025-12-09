@@ -4,6 +4,7 @@
 import { CounterModel } from '../models/CounterModel.js';
 import { Logger } from '../utils/Logger.js';
 import { NotificationService } from '../services/NotificationService.js';
+import { DateFormatter } from '../utils/DateFormatter.js';
 
 export class CounterController {
     constructor() {
@@ -19,7 +20,8 @@ export class CounterController {
         try {
             const data = await this.model.fetchCurrentDay();
             this.redZoneShips = new Set(data.bateaux_zone_rouge);
-            Logger.success(`Compteur initialisé: Jour ${data.numero_jour}, ${data.compteur_passages} passages`);
+            const dateFormatee = DateFormatter.formatShort(data.date_jour);
+            Logger.success(`Compteur initialisé: ${dateFormatee}, ${data.compteur_passages} passages`);
         } catch (error) {
             Logger.error('Erreur initialisation compteur:', error);
             NotificationService.error('Impossible de charger le compteur');
@@ -110,55 +112,93 @@ export class CounterController {
      * @returns {Promise<void>}
      */
     async openDeleteDialog() {
-        const currentDay = this.model.getCurrentDayNumber();
-        if (!currentDay) {
-            NotificationService.error('Aucun jour actuel trouvé');
-            return;
+        try {
+            // Récupérer l'historique pour afficher les dates disponibles
+            const historyData = await this.model.fetchHistory();
+            const historique = historyData.historique;
+
+            if (historique.length === 0 || historique.length === 1) {
+                NotificationService.alert('ℹ️ Aucun historique à effacer (seul le jour actuel existe)');
+                return;
+            }
+
+            // Créer la liste des dates disponibles (sans le jour actuel)
+            const historiquePassé = historique.slice(0, -1);
+            let listeDates = '\nDates disponibles :\n';
+            historiquePassé.forEach((jour, index) => {
+                const dateFormatee = DateFormatter.formatShort(jour.date_jour);
+                listeDates += `${index + 1}. ${dateFormatee} (${jour.compteur_passages} passage${jour.compteur_passages > 1 ? 's' : ''})\n`;
+            });
+
+            const message = `🗑️ Effacer l'historique des passages\n\n` +
+                `Entrez le(s) numéro(s) à effacer :\n\n` +
+                `Format : "1-5" (de la date 1 à la date 5)\n` +
+                `ou "3" (uniquement la date 3)\n` +
+                `ou "tout" (effacer TOUT l'historique)\n` +
+                listeDates;
+
+            const response = NotificationService.prompt(message);
+            if (!response) return;
+
+            // Parser la réponse
+            const trimmed = response.trim().toLowerCase();
+
+            if (trimmed === 'tout') {
+                // Confirmation supplémentaire pour "tout"
+                if (!NotificationService.confirm('⚠️ Êtes-vous sûr de vouloir effacer TOUT l\'historique ?')) {
+                    return;
+                }
+                await this.deleteDays('tout');
+            } else if (trimmed.includes('-')) {
+                // Plage de dates
+                const [indexDebut, indexFin] = trimmed.split('-').map(n => parseInt(n.trim()));
+
+                if (isNaN(indexDebut) || isNaN(indexFin) ||
+                    indexDebut < 1 || indexFin > historiquePassé.length ||
+                    indexDebut > indexFin) {
+                    NotificationService.error(`Plage invalide ! Utilisez un format entre 1 et ${historiquePassé.length}`);
+                    return;
+                }
+
+                const jourDebut = historiquePassé[indexDebut - 1];
+                const jourFin = historiquePassé[indexFin - 1];
+                const dateDebut = DateFormatter.formatShort(jourDebut.date_jour);
+                const dateFin = DateFormatter.formatShort(jourFin.date_jour);
+
+                if (!NotificationService.confirm(`⚠️ Effacer les données du ${dateDebut} au ${dateFin} ?\n\nCette action est irréversible !`)) {
+                    return;
+                }
+
+                // Récupérer les numero_jour correspondants
+                const numeroDebut = jourDebut.numero_jour;
+                const numeroFin = jourFin.numero_jour;
+                await this.deleteDays('plage', { debut: numeroDebut, fin: numeroFin });
+            } else {
+                // Date unique
+                const index = parseInt(trimmed);
+
+                if (isNaN(index) || index < 1 || index > historiquePassé.length) {
+                    NotificationService.error(`Numéro invalide ! Choisissez entre 1 et ${historiquePassé.length}`);
+                    return;
+                }
+
+                const jourAEffacer = historiquePassé[index - 1];
+                const dateAEffacer = DateFormatter.formatShort(jourAEffacer.date_jour);
+
+                if (!NotificationService.confirm(`⚠️ Effacer les données du ${dateAEffacer} ?\n\nCette action est irréversible !`)) {
+                    return;
+                }
+
+                const numeroJour = jourAEffacer.numero_jour;
+                await this.deleteDays('jour', { jour: numeroJour });
+            }
+
+            // Rafraîchir l'affichage après suppression
+            await this.init();
+        } catch (error) {
+            Logger.error('Erreur ouverture menu effacement:', error);
+            NotificationService.error('Erreur lors du chargement de l\'historique');
         }
-
-        const message = `🗑️ Effacer l'historique des passages\n\n` +
-            `Entrez la période à effacer :\n\n` +
-            `Format : "1-30" (du jour 1 au jour 30)\n` +
-            `ou "50" (uniquement le jour 50)\n` +
-            `ou "tout" (effacer TOUT l'historique)\n\n` +
-            `Jours disponibles : 1 à ${currentDay - 1}`;
-
-        const response = NotificationService.prompt(message);
-        if (!response) return;
-
-        // Parser la réponse
-        const trimmed = response.trim().toLowerCase();
-
-        if (trimmed === 'tout') {
-            // Confirmation supplémentaire pour "tout"
-            if (!NotificationService.confirm('⚠️ Êtes-vous sûr de vouloir effacer TOUT l\'historique ?')) {
-                return;
-            }
-            await this.deleteDays('tout');
-        } else if (trimmed.includes('-')) {
-            // Plage de jours
-            const [debut, fin] = trimmed.split('-').map(n => parseInt(n.trim()));
-
-            if (isNaN(debut) || isNaN(fin) || debut < 1 || fin >= currentDay || debut > fin) {
-                NotificationService.error('Plage invalide');
-                return;
-            }
-
-            await this.deleteDays('plage', { debut, fin });
-        } else {
-            // Jour unique
-            const jour = parseInt(trimmed);
-
-            if (isNaN(jour) || jour < 1 || jour >= currentDay) {
-                NotificationService.error('Numéro de jour invalide');
-                return;
-            }
-
-            await this.deleteDays('jour', { jour });
-        }
-
-        // Rafraîchir l'affichage après suppression
-        await this.init();
     }
 
     /**
