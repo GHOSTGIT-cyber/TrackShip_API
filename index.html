@@ -182,6 +182,19 @@
             jourActuel: null
         };
 
+        // ===== FORMATAGE DES DATES =====
+        function formaterDateFr(dateString) {
+            const date = new Date(dateString);
+            const options = { day: 'numeric', month: 'long', year: 'numeric' };
+            return date.toLocaleDateString('fr-FR', options);
+        }
+
+        function formaterDateCourteFr(dateString) {
+            const date = new Date(dateString);
+            const options = { day: '2-digit', month: '2-digit' };
+            return date.toLocaleDateString('fr-FR', options);
+        }
+
         // ===== DÉTECTION TERRE/EAU =====
         const POLYGONE_SEINE_PARIS = [
             [48.890, 2.210], // Amont Ouest
@@ -272,7 +285,8 @@
                     }
                 };
 
-                console.log(`📊 Compteur initialisé: Jour ${data.numero_jour}, ${data.compteur_passages} passages`);
+                const dateFormatee = formaterDateCourteFr(data.date_jour);
+                console.log(`📊 Compteur initialisé: ${dateFormatee}, ${data.compteur_passages} passages`);
 
                 // Afficher le panneau immédiatement après initialisation
                 await afficherPanneauCompteur();
@@ -374,22 +388,26 @@
 
                 let htmlHistorique = '';
                 historique.forEach(jour => {
+                    const dateFormatee = formaterDateCourteFr(jour.date_jour);
                     htmlHistorique += `
                         <div class="jour-item">
-                            <span class="jour-numero">Jour ${jour.numero_jour}</span>
+                            <span class="jour-numero">${dateFormatee}</span>
                             <span class="jour-valeur">${jour.compteur_passages} passage${jour.compteur_passages > 1 ? 's' : ''}</span>
                         </div>
                     `;
                 });
 
+                const dateAujourdhui = formaterDateFr(jourActuel.date);
+                const nbJours = historique.length + 1; // +1 pour le jour actuel
+
                 panneauElement.innerHTML = `
                     <h3>📊 Compteur de passages - Zone Rouge</h3>
                     <div class="compteur-jour-actuel">
-                        <div class="jour-label">Jour ${jourActuel.numeroJour} (Aujourd'hui)</div>
+                        <div class="jour-label">${dateAujourdhui} (Aujourd'hui)</div>
                         <div class="jour-compteur">${jourActuel.compteur} passage${jourActuel.compteur > 1 ? 's' : ''}</div>
                     </div>
                     <div class="compteur-total">
-                        <strong>Total cumulé:</strong> ${totalCumule} passages sur ${jourActuel.numeroJour} jour${jourActuel.numeroJour > 1 ? 's' : ''}
+                        <strong>Total cumulé:</strong> ${totalCumule} passages sur ${nbJours} jour${nbJours > 1 ? 's' : ''}
                     </div>
                     ${historique.length > 0 ? `
                         <div class="compteur-historique-toggle" onclick="toggleHistorique()">
@@ -421,68 +439,101 @@
         }
 
         async function ouvrirMenuEffacement() {
-            const jourActuel = compteurJournalier.jourActuel.numeroJour;
-            const message = `🗑️ Effacer l'historique des passages\n\n` +
-                `Entrez la période à effacer :\n\n` +
-                `Format : "1-30" (du jour 1 au jour 30)\n` +
-                `ou "50" (uniquement le jour 50)\n` +
-                `ou "tout" (effacer TOUT l'historique)\n\n` +
-                `Jours disponibles : 1 à ${jourActuel - 1}`;
-
-            const reponse = prompt(message);
-            if (!reponse) return; // Annulé
-
-            let requestBody = {};
-
-            if (reponse.toLowerCase() === 'tout') {
-                if (!confirm('⚠️ ATTENTION : Voulez-vous vraiment effacer TOUT l\'historique ?\n\nCette action est irréversible !')) {
-                    return;
-                }
-                requestBody = {type: 'all'};
-            } else {
-                const rangMatch = reponse.match(/^(\d+)-(\d+)$/);
-                const singleMatch = reponse.match(/^(\d+)$/);
-
-                if (rangMatch) {
-                    const debut = parseInt(rangMatch[1]);
-                    const fin = parseInt(rangMatch[2]);
-
-                    if (debut >= fin || debut < 1 || fin >= jourActuel) {
-                        alert('❌ Plage invalide ! Utilisez un format comme "1-30"');
-                        return;
-                    }
-
-                    if (!confirm(`⚠️ Effacer les jours ${debut} à ${fin} ?\n\nCette action est irréversible !`)) {
-                        return;
-                    }
-                    requestBody = {type: 'range', debut, fin};
-                } else if (singleMatch) {
-                    const jourAEffacer = parseInt(singleMatch[1]);
-
-                    if (jourAEffacer < 1 || jourAEffacer >= jourActuel) {
-                        alert(`❌ Jour invalide ! Choisissez entre 1 et ${jourActuel - 1}`);
-                        return;
-                    }
-
-                    if (!confirm(`⚠️ Effacer le jour ${jourAEffacer} ?\n\nCette action est irréversible !`)) {
-                        return;
-                    }
-                    requestBody = {type: 'single', jour: jourAEffacer};
-                } else {
-                    alert('❌ Format invalide !\n\nExemples valides :\n- "1-30" (plage)\n- "15" (jour unique)\n- "tout" (tout effacer)');
-                    return;
-                }
-            }
-
-            // Appel API pour effacer
             try {
-                const response = await fetch('api/compteur.php?action=delete_days', {
+                // Récupérer l'historique pour afficher les dates disponibles
+                const response = await fetch('api/compteur.php?action=get_history');
+                const data = await response.json();
+
+                if (data.error) {
+                    alert('❌ Erreur lors du chargement de l\'historique');
+                    return;
+                }
+
+                const historique = data.historique.reverse(); // Plus ancien au plus récent
+
+                if (historique.length === 0) {
+                    alert('ℹ️ Aucun historique à effacer (seul le jour actuel existe)');
+                    return;
+                }
+
+                // Créer la liste des dates disponibles
+                let listeDates = '\nDates disponibles :\n';
+                historique.forEach((jour, index) => {
+                    const dateFormatee = formaterDateCourteFr(jour.date_jour);
+                    listeDates += `${index + 1}. ${dateFormatee} (${jour.compteur_passages} passage${jour.compteur_passages > 1 ? 's' : ''})\n`;
+                });
+
+                const message = `🗑️ Effacer l'historique des passages\n\n` +
+                    `Entrez le(s) numéro(s) à effacer :\n\n` +
+                    `Format : "1-5" (de la date 1 à la date 5)\n` +
+                    `ou "3" (uniquement la date 3)\n` +
+                    `ou "tout" (effacer TOUT l'historique)\n` +
+                    listeDates;
+
+                const reponse = prompt(message);
+                if (!reponse) return; // Annulé
+
+                let requestBody = {};
+
+                if (reponse.toLowerCase() === 'tout') {
+                    if (!confirm('⚠️ ATTENTION : Voulez-vous vraiment effacer TOUT l\'historique ?\n\nCette action est irréversible !')) {
+                        return;
+                    }
+                    requestBody = {type: 'all'};
+                } else {
+                    const rangMatch = reponse.match(/^(\d+)-(\d+)$/);
+                    const singleMatch = reponse.match(/^(\d+)$/);
+
+                    if (rangMatch) {
+                        const indexDebut = parseInt(rangMatch[1]) - 1;
+                        const indexFin = parseInt(rangMatch[2]) - 1;
+
+                        if (indexDebut >= indexFin || indexDebut < 0 || indexFin >= historique.length) {
+                            alert(`❌ Plage invalide ! Utilisez un format entre 1 et ${historique.length}`);
+                            return;
+                        }
+
+                        const dateDebut = formaterDateCourteFr(historique[indexDebut].date_jour);
+                        const dateFin = formaterDateCourteFr(historique[indexFin].date_jour);
+
+                        if (!confirm(`⚠️ Effacer les données du ${dateDebut} au ${dateFin} ?\n\nCette action est irréversible !`)) {
+                            return;
+                        }
+
+                        // Récupérer les numero_jour correspondants
+                        const numeroDebut = historique[indexDebut].numero_jour;
+                        const numeroFin = historique[indexFin].numero_jour;
+                        requestBody = {type: 'range', debut: numeroDebut, fin: numeroFin};
+                    } else if (singleMatch) {
+                        const index = parseInt(singleMatch[1]) - 1;
+
+                        if (index < 0 || index >= historique.length) {
+                            alert(`❌ Numéro invalide ! Choisissez entre 1 et ${historique.length}`);
+                            return;
+                        }
+
+                        const dateAEffacer = formaterDateCourteFr(historique[index].date_jour);
+
+                        if (!confirm(`⚠️ Effacer les données du ${dateAEffacer} ?\n\nCette action est irréversible !`)) {
+                            return;
+                        }
+
+                        const numeroJour = historique[index].numero_jour;
+                        requestBody = {type: 'single', jour: numeroJour};
+                    } else {
+                        alert('❌ Format invalide !\n\nExemples valides :\n- "1-5" (plage)\n- "3" (date unique)\n- "tout" (tout effacer)');
+                        return;
+                    }
+                }
+
+                // Appel API pour effacer
+                const deleteResponse = await fetch('api/compteur.php?action=delete_days', {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify(requestBody)
                 });
 
-                const result = await response.json();
+                const result = await deleteResponse.json();
 
                 if (result.success) {
                     alert(`✅ ${result.message}`);
