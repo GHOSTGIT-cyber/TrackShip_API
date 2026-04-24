@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🛰️ Surveillance des navires - Seine</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+    <!-- Badge Hostinger -->
+    <div class="hostinger-badge">🚀 Powered by Ghost - Architecture MVC</div>
+
+    <!-- Bannière d'alerte (ajoutée dynamiquement par JS) -->
+
+    <!-- Compteur de rafraîchissement -->
+    <div id="compteurRefresh" class="compteur-refresh" style="display: none;">
+        <div>Actualisation dans <span id="tempsRestant">10</span>s</div>
+        <div id="modeActualisation" style="font-size: 12px; opacity: 0.8;">Mode: Normal (10s)</div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <h1>🛰️ Surveillance des navires en mouvement Foil in Paris</h1>
+            <p> • surveillance automatique avec alertes de proximité • Suivi temps réel zone rouge • </p>
+        </div>
+
+        <div class="controls">
+            <div class="form-group">
+                <div>
+                    <label for="token">🔑 Token d'accès</label>
+                    <input type="text" id="token" placeholder="Votre token d'accès">
+                </div>
+                <div>
+                    <label for="rayon">📏 Rayon (km)</label>
+                    <input type="number" id="rayon" value="3" min="1" max="50">
+                </div>
+                <div>
+                    <label for="filtreNavires">🚢 Type de navires</label>
+                    <select id="filtreNavires">
+                        <option value="tous">Tous les navires</option>
+                        <option value="mouvement">En mouvement uniquement</option>
+                        <option value="arret">À l'arrêt uniquement</option>
+                    </select>
+                </div>
+                <div>
+                    <button class="btn" id="btnSurveillance">🔍 Démarrer la surveillance</button>
+                </div>
+            </div>
+
+            <!-- Indicateur de statut -->
+            <div id="statusIndicator" class="status-indicator" style="display: none;">
+                <span id="statusText">Prêt</span>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="map-container">
+                <div id="map"></div>
+            </div>
+
+            <div class="sidebar">
+                <!-- Statistiques -->
+                <div class="stats">
+                    <h3>📊 Statistiques</h3>
+                    <div class="stat-item">
+                        <span class="stat-label">Navires détectés</span>
+                        <span class="stat-value" id="totalNavires">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">🟢 Zone d'approche (3km)</span>
+                        <span class="stat-value" id="naviresApproche">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">🟠 Zone vigilance (2km)</span>
+                        <span class="stat-value" id="naviresVigilance">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">🔴 Zone alerte (1km)</span>
+                        <span class="stat-value" id="naviresAlerte">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">🎯 Trackés en temps réel</span>
+                        <span class="stat-value" id="naviresTrackes">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">📋 Navires numérotés</span>
+                        <span class="stat-value" id="naviresNumerotes">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Dernière MAJ</span>
+                        <span class="stat-value" id="derniereMaj">Jamais</span>
+                    </div>
+                </div>
+
+                <!-- Compteur journalier de passages -->
+                <div id="panneauCompteurJournalier" class="compteur-journalier">
+                    <h3>📊 Compteur de passages - Zone Rouge</h3>
+                    <div class="compteur-jour-actuel">
+                        <div class="jour-label">Jour 1 (Aujourd'hui)</div>
+                        <div class="jour-compteur">0 passage</div>
+                    </div>
+                    <div class="compteur-historique"></div>
+                </div>
+
+                <!-- Panneau d'attention intégré dans la sidebar -->
+                <div id="panneauAttentionSidebar" class="panneau-attention-sidebar" style="display: none;">
+                    <div class="panneau-titre">
+                        <span>🟠</span>
+                        <strong>NAVIRES EN MOUVEMENT - ZONE 2KM</strong>
+                    </div>
+                    <div id="listeAttention"></div>
+                </div>
+
+                <!-- Liste navires surveillés -->
+                <div class="navires-list">
+                    <h3>🟢 Navires Conformes (<span id="nbConformes">0</span>)</h3>
+                    <div id="listeNavires" class="loading">
+                        Cliquez sur "Démarrer la surveillance" pour commencer...
+                    </div>
+                </div>
+
+                <!-- Nouvelle section pour les navires non conformes -->
+                <div class="navires-list" id="sectionNonConformes" style="display: none;">
+                    <h3>⚠️ Navires Non-Conformes (<span id="nbNonConformes">0</span>)</h3>
+                    <div id="listeNonConformes" class="loading">
+                        Aucun navire non conforme détecté
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Application MVC -->
+    <script type="module" src="assets/js/main.js"></script>
+
+    <!-- Script de gestion du token -->
+    <script>
+        // Charger le token depuis localStorage au démarrage
+        document.addEventListener('DOMContentLoaded', () => {
+            const tokenInput = document.getElementById('token');
+            const savedToken = localStorage.getItem('euris_token');
+
+            if (savedToken) {
+                tokenInput.value = savedToken;
+            }
+
+            // Sauvegarder le token à chaque modification
+            tokenInput.addEventListener('change', () => {
+                const token = tokenInput.value.trim();
+                if (token) {
+                    localStorage.setItem('euris_token', token);
+                    console.log('✅ Token sauvegardé');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
