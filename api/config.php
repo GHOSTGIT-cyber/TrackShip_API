@@ -15,24 +15,18 @@ if ($isLocal) {
     // XAMPP Local
     define('DB_HOST', 'localhost');
     define('DB_NAME', 'u411940699_Trackship');
-    define('DB_USER', 'root');  // Utilisateur par défaut XAMPP
-    define('DB_PASS', '');       // Pas de mot de passe par défaut XAMPP
+    define('DB_USER', 'root');
+    define('DB_PASS', '');
     define('DB_CHARSET', 'utf8mb4');
 } else {
-    // Hostinger Production
-    define('DB_HOST', 'localhost');
-    define('DB_NAME', 'u411940699_Trackship');
-    define('DB_USER', 'u411940699_ghost');
-    define('DB_PASS', 'Trackship6?');
+    // Coolify Production
+    define('DB_HOST', 'trackship-db');
+    define('DB_NAME', 'default');
+    define('DB_USER', 'trackship');
+    define('DB_PASS', 'NmCGVOGy9xO');
     define('DB_CHARSET', 'utf8mb4');
 }
 
-/**
- * Fonction de connexion PDO avec gestion d'erreurs
- * Utilise une connexion statique pour réutiliser la même instance
- *
- * @return PDO Instance de connexion PDO
- */
 function getDbConnection() {
     static $pdo = null;
 
