@@ -21,21 +21,16 @@ if ($environment === 'development' || $environment === 'dev') {
     define('DB_PASS', '');
     define('DEBUG_MODE', true);
 } else {
-    // Environnement production (trackship.bakabi.fr)
-    // TODO: Créer la BDD production sur Hostinger
-    define('DB_HOST', 'localhost');
-    define('DB_NAME', 'u411940699_trackship'); // À vérifier
-    define('DB_USER', 'u411940699_trackprod'); // À créer
-    define('DB_PASS', 'MOT_DE_PASSE_PROD_A_CONFIGURER');
+    // Coolify Production
+    define('DB_HOST', 'trackship-db');
+    define('DB_NAME', 'default');
+    define('DB_USER', 'trackship');
+    define('DB_PASS', 'NmCGVOGy9xO');
     define('DEBUG_MODE', false);
 }
 
 define('DB_CHARSET', 'utf8mb4');
 
-/**
- * Crée une connexion PDO à la base de données
- * @return PDO
- */
 function getDatabase() {
     static $pdo = null;
 
